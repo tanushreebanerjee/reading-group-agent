@@ -14,3 +14,8 @@ __pycache__/
 .venv/
 *.pyc
 .pytest_cache/
+# keep the synthetic test recording (TTS, no real people)
+!tests/fixtures/synthetic.wav
+
+# briefs are derived from (copyrighted) papers: keep local
+briefs/

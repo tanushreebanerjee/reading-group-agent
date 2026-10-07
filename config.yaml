@@ -1,0 +1,88 @@
+# Reading Group Assistant configuration. Every tunable lives here.
+# CLI flags (e.g. --mode, --speed) override individual values at runtime.
+
+assistant_name: Atlas
+# Extra spellings STT tends to produce for the name. Matched fuzzily.
+name_aliases: [atlas, atlus, adlas, atlis, attlas, at las]
+# Only look for the name in the first N words of a segment (or right after hey/ok/so).
+name_search_words: 8
+name_match_ratio: 80
+
+audio_device: "BlackHole 2ch"
+mode: ask            # ask | engaged
+
+stt:
+  backend: faster-whisper   # faster-whisper | deepgram
+  model: small.en           # base.en is the lighter fallback
+  compute_type: int8
+  cpu_threads: 4
+  language: en
+  beam_size: 1
+  # live chunking
+  sample_rate: 16000
+  silence_s: 0.6            # cut a chunk after this much silence
+  chunk_max_s: 10
+  energy_threshold: 0.008   # RMS below this counts as silence (float audio, -1..1)
+
+llm:
+  prep:
+    backend: claude-cli
+    model: sonnet
+    timeout_s: 600
+  answer:
+    backend: ollama
+    model: qwen2.5:7b
+    num_ctx: 8192
+    keep_alive: 30m
+    temperature: 0.2
+    max_tokens: 200
+  trigger:
+    backend: ollama
+    model: qwen2.5:7b
+    num_ctx: 4096
+    keep_alive: 30m
+    temperature: 0.0
+    max_tokens: 120
+  summary:
+    backend: ollama
+    model: qwen2.5:7b
+    num_ctx: 8192
+    keep_alive: 30m
+    temperature: 0.2
+    max_tokens: 400
+
+question_pause_s: 1.5
+question_max_s: 30          # stop collecting a question after this long regardless
+
+answer:
+  # retrieval: brief + top-k paper chunks (fast on local 7B models)
+  # full_paper: brief + entire paper text (for large-context cloud models)
+  context: retrieval
+  max_sentences: 3
+  transcript_window_s: 90
+  retrieval_k: 4
+  chunk_chars: 600
+
+trigger:
+  interval_s: 15
+  window_s: 120
+  thresholds:
+    contradiction: 0.7
+    gap: 0.7
+  cooldown_s: 180
+  dedup_ratio: 70
+  context_s: 45             # transcript context around each logged entry
+
+display:
+  host: 127.0.0.1
+  port: 8765
+
+related:
+  max_refs: 8
+  max_citing: 8
+
+paths:
+  prompts_dir: prompts
+  meetings_dir: meetings
+  briefs_dir: briefs
+  cache_dir: meetings/.cache

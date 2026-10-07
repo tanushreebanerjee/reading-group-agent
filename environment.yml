@@ -17,3 +17,5 @@ dependencies:
       - requests
       - ollama
       - pytest
+      - rapidfuzz
+      - websockets
