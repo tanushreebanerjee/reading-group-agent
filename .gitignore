@@ -1,0 +1,16 @@
+# secrets
+.env
+
+# meeting data: never commit
+meetings/
+*.wav
+*.mp3
+
+# papers (copyright; keep local)
+papers/*.pdf
+
+# python
+__pycache__/
+.venv/
+*.pyc
+.pytest_cache/
