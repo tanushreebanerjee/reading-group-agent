@@ -118,7 +118,7 @@ class App:
 
     async def question_loop(self) -> None:
         while True:
-            q = self.collector.poll(self.now, self.source.busy())
+            q = self.collector.poll(self.now, self.source.pending_start())
             if q:
                 self.spawn(self.answer(q))
             await asyncio.sleep(0.05)

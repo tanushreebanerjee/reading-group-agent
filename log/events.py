@@ -31,18 +31,36 @@ def new_meeting_dir(meetings_dir: str | Path, date: dt.date | None = None) -> Pa
 
 
 class EventLog:
+    """Append-only JSONL; reopens per write (see TranscriptStore for why) and rewrites on close."""
+
     def __init__(self, path: str | Path):
         self.path = Path(path)
-        self._fh = open(self.path, "a")
+        self.events: list[dict] = []
 
     def write(self, kind: str, **data) -> dict:
         ev = {"kind": kind, "wall": time.time(), **data}
-        self._fh.write(json.dumps(ev) + "\n")
-        self._fh.flush()
+        self.events.append(ev)
+        with open(self.path, "a") as f:
+            f.write(json.dumps(ev) + "\n")
         return ev
 
     def close(self) -> None:
-        self._fh.close()
+        with open(self.path, "w") as f:
+            f.writelines(json.dumps(ev) + "\n" for ev in self.events)
+
+
+ICLOUD_DIRS = ("Desktop", "Documents")
+
+
+def icloud_synced(path: str | Path) -> bool:
+    """True if `path` is under ~/Desktop or ~/Documents while iCloud Desktop & Documents sync is on."""
+    p = Path(path).resolve()
+    home = Path.home()
+    cloud = home / "Library" / "Mobile Documents" / "com~apple~CloudDocs"
+    for d in ICLOUD_DIRS:
+        if (cloud / d).exists() and (p == home / d or (home / d) in p.parents):
+            return True
+    return False
 
 
 def read_events(path: str | Path) -> list[dict]:

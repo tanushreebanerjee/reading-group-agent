@@ -3,7 +3,7 @@
 Each source exposes:
     clock            RealClock / SimClock
     segments()       async iterator of Segment
-    busy()           True while speech is buffered or being transcribed (live only)
+    pending_start()  meeting time where not-yet-transcribed speech begins, or None
 """
 from __future__ import annotations
 
@@ -63,8 +63,8 @@ class ReplaySource:
         print(f"[audio] transcribed in {time.time() - t0:.1f}s -> {cache}", file=sys.stderr)
         return segs
 
-    def busy(self) -> bool:
-        return False
+    def pending_start(self) -> float | None:
+        return None  # replay emits whole segments; nothing is ever half-transcribed
 
     async def segments(self):
         segs = await asyncio.to_thread(self.load_segments)
@@ -148,11 +148,15 @@ class LiveSource:
                                float(s.get("energy_threshold", 0.008)))
         self.record_path = record_path
         self.prompt = prompt or stt_prompt(cfg)
-        self._transcribing = 0
+        self._inflight: list[float] = []   # start times of chunks being transcribed
         self.done = False
 
-    def busy(self) -> bool:
-        return self.chunker.has_speech or self._transcribing > 0
+    def pending_start(self) -> float | None:
+        """Meeting time where not-yet-transcribed speech begins (buffered or in flight), if any."""
+        starts = list(self._inflight)
+        if self.chunker.has_speech:
+            starts.append(self.chunker.buf_start)
+        return min(starts) if starts else None
 
     async def segments(self):
         import sounddevice as sd
@@ -178,10 +182,10 @@ class LiveSource:
             async with sem:
                 try:
                     segs = await asyncio.to_thread(stt.transcribe, audio, start)
+                    for s in segs:
+                        await out_q.put(s)
                 finally:
-                    self._transcribing -= 1
-                for s in segs:
-                    await out_q.put(s)
+                    self._inflight.remove(start)
 
         async def pump():
             tasks = []
@@ -190,7 +194,7 @@ class LiveSource:
                 if rec:
                     rec.write(mono)
                 for start, audio in self.chunker.push(resample(mono, self.sr_in, self.sr)):
-                    self._transcribing += 1
+                    self._inflight.append(start)
                     tasks.append(asyncio.create_task(transcribe(start, audio)))
 
         self.clock = RealClock()

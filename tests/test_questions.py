@@ -14,11 +14,18 @@ def test_collects_until_pause():
     assert q.end == 14.0 and not qc.collecting
 
 
-def test_busy_source_delays_close():
+def test_continuing_speech_delays_close():
     qc = QuestionCollector(pause_s=1.5)
     qc.start(Segment(0, 2, "Sherlock, why"), "why")
-    assert qc.poll(5.0, busy=True) is None
-    assert qc.poll(5.0, busy=False) is not None
+    assert qc.poll(5.0, pending_start=2.5) is None      # same speaker still talking (started before pause)
+    assert qc.poll(5.0, pending_start=None) is not None
+
+
+def test_next_speaker_does_not_extend_question():
+    qc = QuestionCollector(pause_s=1.5)
+    qc.start(Segment(0, 2, "Sherlock, why"), "why")
+    q = qc.poll(5.0, pending_start=4.5)                 # new utterance began after the 1.5 s pause
+    assert q is not None and q.text == "why"
 
 
 def test_max_length_forces_close():

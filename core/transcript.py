@@ -52,18 +52,23 @@ def write_jsonl(path: str | Path, segs: Iterable[Segment]) -> None:
 
 
 class TranscriptStore:
-    """Rolling transcript kept in memory and appended to a JSONL file."""
+    """Rolling transcript kept in memory and appended to a JSONL file.
+
+    The file is reopened for every append instead of holding a handle: sync
+    tools (iCloud Desktop & Documents) can replace a freshly created file, and a
+    held handle would then write into an orphaned copy. close() rewrites the
+    whole file from memory as a final safeguard.
+    """
 
     def __init__(self, path: str | Path | None = None):
         self.segments: list[Segment] = []
         self.path = Path(path) if path else None
-        self._fh = open(self.path, "a") if self.path else None
 
     def add(self, seg: Segment) -> None:
         self.segments.append(seg)
-        if self._fh:
-            self._fh.write(seg.to_json() + "\n")
-            self._fh.flush()
+        if self.path:
+            with open(self.path, "a") as f:
+                f.write(seg.to_json() + "\n")
 
     def window(self, now: float, seconds: float) -> list[Segment]:
         return sorted((s for s in self.segments if s.end >= now - seconds), key=lambda s: s.start)
@@ -72,6 +77,5 @@ class TranscriptStore:
         return [s for s in self.segments if s.end >= t0 and s.start <= t1]
 
     def close(self) -> None:
-        if self._fh:
-            self._fh.close()
-            self._fh = None
+        if self.path:
+            write_jsonl(self.path, sorted(self.segments, key=lambda s: s.start))

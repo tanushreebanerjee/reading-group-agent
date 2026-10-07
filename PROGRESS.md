@@ -131,6 +131,18 @@ Re-read this when resuming work. Plan: Phases 0–5 from `CLAUDE.md`.
   separately, since a threshold change wouldn't affect them.
 - **Any config value** can be overridden per run: `--set key.sub=value`.
 
+- **Live-path test without Zoom:** `tests/loopback_check.py` plays the fixture
+  into BlackHole's output while the app runs in live mode on its input. Result:
+  48 segments, WER 9.4%, name 2/2, both answers correct and cited, first words
+  12–15 s after the question (live Whisper chunks included). This found two
+  bugs replay could not:
+  1. Live questions absorbed the next speaker's turn ("busy" held them open).
+     The collector now only waits for speech that *started* before the pause
+     ended (`pending_start()`).
+  2. iCloud Desktop sync replaced a freshly created `transcript.jsonl`, so a
+     held file handle wrote into an orphaned copy. Writers now reopen per
+     append and rewrite the full file on close.
+
 ## How to run
 
 See README. Phase 0: `python -m audio --list-devices`, `pytest -q`,
@@ -143,6 +155,11 @@ See README. Phase 0: `python -m audio --list-devices`, `pytest -q`,
 - Live chunking uses a simple energy VAD (`stt.energy_threshold`). It is
   untested on real room audio and may need tuning for Zoom levels.
 
+- **Privacy: the repo is on an iCloud-synced Desktop.** Everything under
+  `meetings/` (transcripts, logs, `--record` audio) is uploaded to iCloud,
+  which contradicts "stays local". The app warns at startup. Fix (needs the
+  user): move the repo outside ~/Desktop and ~/Documents, or set
+  `paths.meetings_dir` to a non-synced folder.
 - **Answer latency on the MacBook Air is 6–13 s to first words, not ~5 s.**
   The fix is to run the LLM on a GPU: the UMD Nexus cluster (Ampere). Plan:
   start an Ollama server in a SLURM GPU job, open an SSH tunnel to

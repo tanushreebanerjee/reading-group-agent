@@ -7,6 +7,11 @@ addressed by name ("Sherlock, ..."). In `engaged` mode it also quietly raises a
 hand when it spots a contradiction with the paper or a factual question the
 group can't resolve. Nothing is shown until someone presses Reveal.
 
+> **Privacy:** keep this repo outside iCloud-synced folders (`~/Desktop`,
+> `~/Documents` when "Desktop & Documents" sync is on). Otherwise meeting
+> transcripts and recordings under `meetings/` are uploaded to iCloud. The app
+> warns at startup if this is the case.
+
 The default setup costs nothing: local speech-to-text (faster-whisper), a
 local LLM (Ollama), and `claude -p` (your Claude Code login) for the
 pre-meeting brief. Paid backends are optional config changes.
@@ -112,6 +117,14 @@ Transcripts and logs stay under `meetings/`, which is gitignored.
 ```bash
 pytest -q                                   # unit tests, no audio or LLM needed
 python tests/fixtures/make_synthetic.py     # regenerate the synthetic meeting (macOS say)
+```
+
+End-to-end checks against the synthetic meeting (need Ollama running):
+
+```bash
+python tests/e2e_check.py --phase 3        # ask mode on replay: answers, citations, display, log
+python tests/e2e_check.py --phase 5        # engaged mode, real time: hands, reveal/dismiss, log
+python tests/loopback_check.py             # live path: plays the WAV into BlackHole, app listens live
 ```
 
 `tests/fixtures/synthetic_script.md` is the ground truth for

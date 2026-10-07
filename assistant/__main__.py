@@ -66,6 +66,12 @@ def main(argv=None):
 
     meeting_dir = Path(args.meeting_dir) if args.meeting_dir else new_meeting_dir(cfg["paths"]["meetings_dir"])
     meeting_dir.mkdir(parents=True, exist_ok=True)
+    from log.events import icloud_synced
+
+    if icloud_synced(meeting_dir):
+        log(f"[assistant] WARNING: {meeting_dir} is inside an iCloud-synced folder (Desktop/Documents). "
+            "Transcripts, logs and --record audio will be uploaded to iCloud. Move the repo or set "
+            "paths.meetings_dir to a local folder outside ~/Desktop and ~/Documents.")
     source = make_source(cfg, replay=args.replay, speed=args.speed, record=args.record,
                          record_dir=meeting_dir, prompt=stt_prompt(cfg, paper.title, key_terms(paper)))
     hold = args.hold if args.hold is not None else (10.0 if args.replay else 0.0)

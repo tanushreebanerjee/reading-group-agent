@@ -20,8 +20,10 @@ class Question:
 class QuestionCollector:
     """State machine: idle -> collecting (after a name hit) -> ready (after `pause_s` of silence).
 
-    Feed segments with add(); call poll(now, busy) periodically. poll returns a finished
-    Question once `now >= last_end + pause_s` and the audio source isn't mid-utterance.
+    Feed segments with add(); call poll(now, pending_start) periodically. poll returns a
+    finished Question once `now >= last_end + pause_s`, unless speech that started before
+    the pause ended is still being captured or transcribed (a continuation of the question).
+    Speech that started after the pause is the next utterance and does not hold it open.
     """
 
     def __init__(self, pause_s: float = 1.5, max_s: float = 30.0):
@@ -41,11 +43,12 @@ class QuestionCollector:
             self.current.parts.append(seg.text.strip())
             self.current.end = seg.end
 
-    def poll(self, now: float, busy: bool = False) -> Question | None:
+    def poll(self, now: float, pending_start: float | None = None) -> Question | None:
         q = self.current
         if not q:
             return None
-        paused = now >= q.end + self.pause_s and not busy
+        continuing = pending_start is not None and pending_start < q.end + self.pause_s
+        paused = now >= q.end + self.pause_s and not continuing
         too_long = now - q.start >= self.max_s
         if paused or too_long:
             self.current = None
