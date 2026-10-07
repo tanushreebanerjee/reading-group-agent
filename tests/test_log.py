@@ -55,7 +55,11 @@ def test_tune_reads_labels(tmp_path, cfg):
     assert entries["H1"].helpful is True and entries["H1"].conf == 0.9
     assert entries["T2"].helpful is True and entries["T3"].helpful is False
     assert "A1" not in entries
-    rep = report(list(entries.values()), [0.5, 0.7, 0.9])
+    from log.tune import Labelled
+
+    extra = Labelled("m", "T9", "trigger", "gap", 0.99, "duplicate", False)
+    rep = report(list(entries.values()) + [extra], [0.5, 0.7, 0.9])
+    assert "1 duplicate" in rep  # duplicates don't count toward precision
     gap = rep.split("## gap")[1]
     assert "0.50      2        1        50%" in gap
     assert "0.70      1        0         0%" in gap

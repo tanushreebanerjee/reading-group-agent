@@ -11,7 +11,7 @@ Re-read this when resuming work. Plan: Phases 0–5 from `CLAUDE.md`.
 | 2 Transcript | done | `python -m audio --replay tests/fixtures/synthetic.wav --speed 4 --paper papers/test.pdf` streams a readable transcript; `tests/transcript_wer.py`: WER 7.5%, name heard 2/2 |
 | 3 Ask + display | done, latency target missed locally | `tests/e2e_check.py --phase 3`: both questions answered correctly with citations, streamed to the display, no spurious answers. First words 8–13 s after the question locally; the ~5 s target needs a GPU backend (see Known issues) |
 | 4 Meeting log | done | after each run `meetings/<dir>/log.md` has the summary, every answer, every hand (revealed/dismissed/ignored), and every suppressed trigger, each with ±45 s transcript context, a machine marker, and a blank `helpful:` line; `tests/test_log.py` round-trips labels through `log.tune` |
-| 5 Engaged mode | todo | |
+| 5 Engaged mode | done | `tests/e2e_check.py --phase 5` (real time): contradiction hand raised 28 s after the wrong claim with the exact quote and a correct §4.3/Table 2 correction; the stalled source-views gap raised with the right answer (N=2); 0 false hands; reveal/dismiss/ignored all logged; `tests/label_synthetic.py` + `python -m log.tune` print precision per type/threshold. Answer latency still over target (see Known issues) |
 
 ## Environment (dev machine)
 
@@ -111,6 +111,26 @@ Re-read this when resuming work. Plan: Phases 0–5 from `CLAUDE.md`.
 - **Local overrides:** `config.local.yaml` (gitignored) is merged over
   `config.yaml`. It holds `group_members` (lab names), which prime Whisper.
 
+- **Trigger grounding:** the checker must return the speaker's exact words
+  (`quote`). The gate rejects a trigger as `ungrounded` unless the quote
+  fuzzy-matches (partial_ratio ≥ 80) a human line in the window. Without this,
+  qwen2.5:7b raised hands for "open questions" copied from the brief that
+  nobody said, at confidence 1.0. The prompt also has a confidence rubric and
+  one example per trigger type.
+- **Trigger scheduling:** checks wait at least 1.5× the previous check's
+  duration (each takes 10–20 s locally), retry 2 s after a busy skip, and
+  never run while an answer or question is in progress. The assistant's own
+  answers go into the transcript (speaker = its name), so answered questions
+  aren't flagged as gaps.
+- **De-duplication** compares quote + reason against earlier hands. Cooldown
+  is global (3 min default). The e2e fixture uses `--set trigger.cooldown_s=30`
+  because its two planted events are 48 s apart; the default is covered by
+  unit tests.
+- **Tuning report:** precision counts raised hands plus below-threshold and
+  cooldown triggers. Duplicate, ungrounded, and invalid triggers are listed
+  separately, since a threshold change wouldn't affect them.
+- **Any config value** can be overridden per run: `--set key.sub=value`.
+
 ## How to run
 
 See README. Phase 0: `python -m audio --list-devices`, `pytest -q`,
@@ -137,6 +157,16 @@ See README. Phase 0: `python -m audio --list-devices`, `pytest -q`,
 - The 7B summary sometimes mixes brief content into "what was discussed" and
   can misstate facts (on the fixture it said the paper doesn't give the number
   of source views; §5.1 says 2). A stronger model (GPU backend) should help.
+
+- **Trigger confidence is coarse:** qwen2.5:7b mostly outputs 0.8 or 0.9, so
+  threshold tuning has little resolution until we collect real labels or use
+  a stronger model.
+- **Gap hands are slow:** the source-views gap was raised 86 s after the
+  question, since each check takes 10–20 s and waits behind answers.
+- **Interjections can hedge or cite a weaker location:** the gap interjection
+  said "2 source views" but cited App. A.3 instead of §5.1 and added a
+  self-contradicting hedge. Earlier runs before the fixes had one invented
+  number ("DINO 16.386").
 
 ## Needs a human to test live
 

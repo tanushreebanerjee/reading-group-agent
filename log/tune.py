@@ -52,9 +52,14 @@ def find_logs(target: Path) -> list[Path]:
     return sorted(p for p in target.rglob("log.md") if not p.parent.name.startswith("."))
 
 
+# Suppressed for reasons a threshold change would not affect: excluded from precision.
+NOT_THRESHOLD = {"duplicate", "ungrounded", "invalid"}
+
+
 def report(entries: list[Labelled], thresholds: list[float], current: dict | None = None) -> str:
     lines = []
-    labelled = [e for e in entries if e.helpful is not None]
+    other = [e for e in entries if e.status in NOT_THRESHOLD]
+    labelled = [e for e in entries if e.helpful is not None and e.status not in NOT_THRESHOLD]
     lines.append(f"{len(entries)} trigger entries, {len(labelled)} labelled "
                  f"({sum(e.kind == 'hand' for e in entries)} raised hands, "
                  f"{sum(e.kind == 'trigger' for e in entries)} suppressed triggers)")
@@ -70,9 +75,16 @@ def report(entries: list[Labelled], thresholds: list[float], current: dict | Non
             prec = f"{good / len(fired):.0%}" if fired else "–"
             mark = "  <-" if cur is not None and abs(t - float(cur)) < 1e-9 else ""
             lines.append(f"{t:>10.2f} {len(fired):>6} {good:>8} {prec:>10}{mark}")
-        unl = sum(1 for e in entries if e.type == typ and e.helpful is None)
+        unl = sum(1 for e in entries if e.type == typ and e.helpful is None and e.status not in NOT_THRESHOLD)
         if unl:
             lines.append(f"({unl} unlabelled {typ} entries ignored)")
+        skipped = [e for e in other if e.type == typ]
+        if skipped:
+            by = {}
+            for e in skipped:
+                by[e.status] = by.get(e.status, 0) + 1
+            lines.append("(not counted, suppressed regardless of threshold: "
+                         + ", ".join(f"{n} {s}" for s, n in sorted(by.items())) + ")")
     return "\n".join(lines)
 
 
