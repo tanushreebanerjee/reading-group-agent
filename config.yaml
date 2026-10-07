@@ -36,10 +36,12 @@ llm:
     keep_alive: 30m
     temperature: 0.2
     max_tokens: 200
+  # Roles that share a model must use the same num_ctx, or Ollama reloads the
+  # model whenever they alternate.
   trigger:
     backend: ollama
     model: qwen2.5:7b
-    num_ctx: 4096
+    num_ctx: 8192
     keep_alive: 30m
     temperature: 0.0
     max_tokens: 120
@@ -59,9 +61,10 @@ answer:
   # full_paper: brief + entire paper text (for large-context cloud models)
   context: retrieval
   max_sentences: 3
-  transcript_window_s: 90
-  retrieval_k: 4
-  chunk_chars: 600
+  transcript_window_s: 45
+  retrieval_k: 3
+  chunk_chars: 450
+  chunk_overlap: 120        # chars repeated from the previous chunk
 
 trigger:
   interval_s: 15

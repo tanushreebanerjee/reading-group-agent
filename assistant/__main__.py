@@ -42,7 +42,9 @@ def main(argv=None):
     from log.events import new_meeting_dir
 
     paper_path = Path(args.paper)
-    paper = load_paper(paper_path, int(cfg["answer"].get("chunk_chars", 600)), cfg["paths"]["cache_dir"])
+    a = cfg["answer"]
+    paper = load_paper(paper_path, int(a.get("chunk_chars", 600)), cfg["paths"]["cache_dir"],
+                       int(a.get("chunk_overlap", 200)))
     brief_path = Path(args.brief) if args.brief else Path(cfg["paths"]["briefs_dir"]) / paper_path.stem / "brief.md"
     if brief_path.exists():
         brief = brief_path.read_text()

@@ -106,7 +106,8 @@ def chunk_pages(pages: list[str], chunk_chars: int = 600, overlap: int = 200) ->
     return chunks
 
 
-def load_paper(pdf_path: str | Path, chunk_chars: int = 600, cache_dir: str | Path | None = None) -> Paper:
+def load_paper(pdf_path: str | Path, chunk_chars: int = 600, cache_dir: str | Path | None = None,
+               overlap: int = 200) -> Paper:
     pdf_path = Path(pdf_path)
     cache = None
     if cache_dir:
@@ -120,7 +121,7 @@ def load_paper(pdf_path: str | Path, chunk_chars: int = 600, cache_dir: str | Pa
     else:
         pages = extract_pages(pdf_path)
     return Paper(title=guess_title(pages[0] if pages else ""), pages=pages,
-                 chunks=chunk_pages(pages, chunk_chars))
+                 chunks=chunk_pages(pages, chunk_chars, overlap))
 
 
 GLUE_RE = re.compile(r"(?<=[a-z])(?=[A-Z])|(?<=[0-9])(?=[A-Za-z])|(?<=[A-Za-z])(?=[0-9])")

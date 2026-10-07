@@ -9,7 +9,7 @@ Re-read this when resuming work. Plan: Phases 0–5 from `CLAUDE.md`.
 | 0 Skeleton | done | `python -m audio --list-devices` shows BlackHole 2ch; `pytest` green; `synthetic.wav` 5.0 min |
 | 1 Prep brief | done | `python -m prep papers/test.pdf` -> `briefs/test/brief.md` (935 words); all 8 key-number rows verified on cited page by `prep.verify`, Tables 2/3 hand-checked |
 | 2 Transcript | done | `python -m audio --replay tests/fixtures/synthetic.wav --speed 4 --paper papers/test.pdf` streams a readable transcript; `tests/transcript_wer.py`: WER 7.5%, name heard 2/2 |
-| 3 Ask + display | todo | |
+| 3 Ask + display | done, latency target missed locally | `tests/e2e_check.py --phase 3`: both questions answered correctly with citations, streamed to the display, no spurious answers. First words 8–13 s after the question locally; the ~5 s target needs a GPU backend (see Known issues) |
 | 4 Meeting log | todo | |
 | 5 Engaged mode | todo | |
 
@@ -80,6 +80,26 @@ Re-read this when resuming work. Plan: Phases 0–5 from `CLAUDE.md`.
   and every timer (question pause, trigger interval, cooldown) runs in
   meeting time, so `--speed N` scales everything consistently.
 
+- **Live answer prompt layout (latency):** every live prompt (answer,
+  interjection, trigger) starts with the same prefix (identity + brief) and
+  puts per-question content (excerpts, transcript) in the user turn. Ollama
+  reuses the cached prefix: a new question costs ~0.4 s for the prefix instead
+  of ~20 s. The app prefills the prefix at startup. Roles sharing a model use
+  the same `num_ctx`; a mismatch makes Ollama reload the model.
+- **Measured on the M4 Air (qwen2.5:7b, 100% GPU):** generation runs at ~8
+  tokens/s, and new prompt tokens are read at ~80–200 tokens/s. With 3 chunks
+  of 450 chars and a 45 s transcript window, first words appear 6–13 s after
+  the question and the full answer at 11–19 s. qwen2.5:3b is about 2× faster
+  but got 1 of 4 test answers wrong and cited nothing, so it is not used for
+  answers.
+- **Answer latency** is logged two ways: first words on screen (answers
+  stream) and complete answer, both measured from the end of the question
+  audio.
+- **Display:** FastAPI + websocket on 127.0.0.1:8765. The hub replays current
+  state to a reloaded page. Raised hands send only the trigger type; content
+  is sent on reveal. Keys: R reveal, D dismiss.
+- Model output is cleaned of LaTeX/markdown before display.
+
 ## How to run
 
 See README. Phase 0: `python -m audio --list-devices`, `pytest -q`,
@@ -91,6 +111,17 @@ See README. Phase 0: `python -m audio --list-devices`, `pytest -q`,
   TTS artifact, and real speech should be fine (vocabulary priming is on).
 - Live chunking uses a simple energy VAD (`stt.energy_threshold`). It is
   untested on real room audio and may need tuning for Zoom levels.
+
+- **Answer latency on the MacBook Air is 6–13 s to first words, not ~5 s.**
+  The fix is to run the LLM on a GPU: the UMD Nexus cluster (Ampere). Plan:
+  start an Ollama server in a SLURM GPU job, open an SSH tunnel to
+  localhost:11434, and set `OLLAMA_HOST` in `.env`. Audio, Whisper, and the
+  display stay on the Mac with Zoom; only LLM text goes over the tunnel. This
+  also allows a larger model (e.g. qwen2.5:32b). Still to do: an sbatch
+  script and automatic fallback to the local model if the tunnel drops.
+  Needs the user's Nexus account, partition, and QOS.
+- Memory: with qwen2.5:7b + 3b both loaded, free memory dropped to 18% and
+  prefill slowed about 2×. Keep only one model resident on the 16 GB Air.
 
 ## Needs a human to test live
 

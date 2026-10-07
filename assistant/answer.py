@@ -9,14 +9,26 @@ from typing import Awaitable, Callable
 
 from core.llm import LLM
 from core.paper import Paper, Retriever
-from core.prompts import load_prompt
+from core.prompts import load_prompt, system_prompt
 
-CITATION_RE = re.compile(r"§\s*[A-Z]?\d|\b(?:Sec(?:tion)?\.?|Table|Tab\.|Fig(?:ure)?\.?|Eq(?:uation)?\.?|"
-                         r"App(?:endix)?\.?)\s*\(?[A-Z]?\d", re.I)
+CITATION_RE = re.compile(r"§\s*(?:[A-Z]\.?)?\d|\b(?:Sec(?:tion)?\.?|Table|Tab\.|Fig(?:ure)?\.?|Eq(?:uation)?\.?|"
+                         r"App(?:endix)?\.?)\s*\(?(?:[A-Z]\.?)?\d", re.I)
 
 
 def has_citation(text: str) -> bool:
     return bool(CITATION_RE.search(text))
+
+
+LATEX_SUBS = [(r"\\[()\[\]]", ""), (r"\\times", "×"), (r"\\cdot", "·"), (r"\\approx", "≈"), (r"\\leq?", "≤"),
+              (r"\\geq?", "≥"), (r"\\delta", "δ"), (r"\\rightarrow|\\to", "→"), (r"\^\{([^}]*)\}", r"^\1"),
+              (r"_\{([^}]*)\}", r"_\1"), (r"\\(?:text|mathrm|mathbf)\{([^}]*)\}", r"\1"), (r"\*\*|__", "")]
+
+
+def plain_text(text: str) -> str:
+    """Strip LaTeX/markdown the model sometimes emits; the room screen shows plain text."""
+    for pat, rep in LATEX_SUBS:
+        text = re.sub(pat, rep, text)
+    return re.sub(r"[ \t]+", " ", text).strip()
 
 
 def trim_sentences(text: str, n: int) -> str:
@@ -56,9 +68,8 @@ class Answerer:
 
     def build(self, prompt_name: str, question: str, transcript: str, **extra) -> tuple[str, str, list[str]]:
         excerpts, sources = self.excerpts(f"{question} {extra.get('reason', '')}")
-        system = load_prompt(self.cfg, prompt_name, name=self.cfg.get("assistant_name", "Sherlock"),
-                             max_sentences=self.max_sentences, brief=self.brief, excerpts=excerpts)
-        user = load_prompt(self.cfg, f"{prompt_name}_user", transcript=transcript or "(none)",
+        system = system_prompt(self.cfg, self.brief, prompt_name, max_sentences=self.max_sentences)
+        user = load_prompt(self.cfg, f"{prompt_name}_user", excerpts=excerpts, transcript=transcript or "(none)",
                            question=question, **extra)
         return system, user, sources
 
@@ -93,8 +104,13 @@ class Answerer:
             if on_delta:
                 await on_delta(item)
         await fut
-        text = trim_sentences("".join(pieces), max_sentences or self.max_sentences)
+        text = trim_sentences(plain_text("".join(pieces)), max_sentences or self.max_sentences)
         return AnswerResult(text, time.monotonic() - t0, first, has_citation(text), sources)
+
+    def warmup(self) -> None:
+        """Prefill the shared prompt prefix (identity + brief) so the first answer is fast."""
+        system = system_prompt(self.cfg, self.brief, "answer", max_sentences=self.max_sentences)
+        self.llm.complete(system, "Reply with: ready", max_tokens=1)
 
     async def answer(self, question: str, transcript: str, on_delta=None) -> AnswerResult:
         return await self.run("answer", question, transcript, on_delta)

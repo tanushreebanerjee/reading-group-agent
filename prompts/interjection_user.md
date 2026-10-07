@@ -1,3 +1,6 @@
+Paper excerpts (labels give section and page):
+$excerpts
+
 Recent conversation (timestamps are meeting time):
 $transcript
 

@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from rapidfuzz import fuzz
 
 from core.llm import LLM
-from core.prompts import load_prompt
+from core.prompts import load_prompt, system_prompt
 
 TRIGGER_TYPES = ("contradiction", "gap")
 
@@ -85,7 +85,7 @@ class TriggerChecker:
         self.brief = brief or "(no brief available)"
 
     def build(self, transcript: str, already_raised: list[str]) -> tuple[str, str]:
-        system = load_prompt(self.cfg, "trigger", brief=self.brief)
+        system = system_prompt(self.cfg, self.brief, "trigger")
         raised = "\n".join(f"- {r}" for r in already_raised) or "(none)"
         user = load_prompt(self.cfg, "trigger_user", transcript=transcript or "(silence)", raised=raised)
         return system, user

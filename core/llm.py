@@ -92,13 +92,6 @@ class OllamaLLM(LLM):
         except Exception as e:
             raise LLMError(f"ollama ({self.model}): {e}") from e
 
-    def warmup(self) -> None:
-        """Load the model into memory so the first real call is fast."""
-        try:
-            self.client.generate(model=self.model, prompt="", keep_alive=self.cfg.get("keep_alive", "30m"))
-        except Exception as e:
-            raise LLMError(f"ollama warmup ({self.model}): {e}") from e
-
 
 class ClaudeCLILLM(LLM):
     """Shells out to `claude -p` (headless Claude Code) on the developer's login.

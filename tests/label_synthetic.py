@@ -37,7 +37,7 @@ def labels_for(meeting_dir: Path) -> dict[str, str]:
             out[ev["id"]] = "yes" if good else "no"
         elif ev["kind"] == "answer":
             good = any(t["start"] - 3 <= ev["q_start"] <= t["end"] + 3 and
-                       all(term.lower() in ev["text"].lower() for term in terms) for t, terms in asks)
+                       all(any(alt.lower() in ev["text"].lower() for alt in term.split("|")) for term in terms) for t, terms in asks)
             out[ev["id"]] = "yes" if good else "no"
     return out
 

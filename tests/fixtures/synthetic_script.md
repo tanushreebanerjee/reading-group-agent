@@ -12,7 +12,7 @@ events:
     turn: 7
     question: "What PSNR does GLD get on RealEstate10K, compared to the VAE baseline?"
     expected: "16.362 for GLD vs 15.656 for VAE (Table 3)"
-    expect_terms: ["16.36", "15.65", "Table 3"]
+    expect_terms: ["16.36", "15.656|15.66", "Table 3|Table 13"]   # Table 13 repeats Table 3 rounded
   - id: wrong1
     kind: contradiction
     turn: 12

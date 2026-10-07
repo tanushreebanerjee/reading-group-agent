@@ -68,8 +68,16 @@ class App:
     def spawn(self, coro) -> asyncio.Task:
         task = asyncio.create_task(coro)
         self.tasks.add(task)
-        task.add_done_callback(self.tasks.discard)
+        task.add_done_callback(self._task_done)
         return task
+
+    def _task_done(self, task: asyncio.Task) -> None:
+        self.tasks.discard(task)
+        if not task.cancelled() and task.exception():
+            import traceback
+
+            log("[assistant] ERROR in background task:\n" + "".join(
+                traceback.format_exception(task.exception())))
 
     async def send_status(self) -> None:
         await self.hub.send({"type": "status", "mode": self.mode, "listening": self.listening,
@@ -134,17 +142,20 @@ class App:
                     float(self.cfg["answer"].get("transcript_window_s", 90))), on_delta)
         finally:
             self.answering -= 1
-        # end-to-end latency in wall seconds, measured from the end of the question audio
+        # end-to-end latency in wall seconds, measured from the end of the question audio:
+        # first words on screen (answers stream) and complete answer
         e2e = (self.now - q.end) / self.source.clock.speed
-        self.last_latency = e2e
+        first_words = e2e - res.latency_s + res.first_token_s if res.first_token_s is not None else None
+        self.last_latency = first_words if first_words is not None else e2e
         await self.hub.send({"type": "answer_done", "id": aid, "question": question, "text": res.text,
-                             "latency_s": e2e, "cited": res.cited})
+                             "latency_s": self.last_latency, "complete_s": e2e, "cited": res.cited})
         await self.send_status()
         self.events.write("answer", id=aid, t=round(self.now, 2), question=question, q_start=q.start,
                           q_end=q.end, detected_t=round(detected_t, 2), text=res.text, latency_s=round(e2e, 2),
+                          first_words_s=first_words and round(first_words, 2),
                           llm_s=round(res.latency_s, 2), first_token_s=res.first_token_s and round(res.first_token_s, 2),
                           cited=res.cited, sources=res.sources)
-        log(f"    -> {aid} ({e2e:.1f}s after question end, llm {res.latency_s:.1f}s"
+        log(f"    -> {aid} (first words {first_words or -1:.1f}s / complete {e2e:.1f}s after question end, llm {res.latency_s:.1f}s"
             f"{'' if res.cited else ', NO CITATION'}): {res.text}")
 
     # ---------- engaged mode ----------
@@ -217,12 +228,12 @@ class App:
                           answer_llm=repr(self.answer_llm), trigger_llm=repr(self.trigger_llm),
                           stt_model=self.cfg["stt"].get("model"), speed=self.source.clock.speed)
         await self.send_status()
-        for llm in {id(self.answer_llm): self.answer_llm, id(self.trigger_llm): self.trigger_llm}.values():
-            if hasattr(llm, "warmup"):
-                try:
-                    await asyncio.to_thread(llm.warmup)
-                except Exception as e:
-                    log(f"[assistant] WARNING: {e}")
+        t0 = time.monotonic()
+        try:
+            await asyncio.to_thread(self.answerer.warmup)
+            log(f"[assistant] answer model warm ({time.monotonic() - t0:.1f}s)")
+        except Exception as e:
+            log(f"[assistant] WARNING: answer model warmup failed: {e}")
         loops = [asyncio.create_task(self.question_loop())]
         if self.mode == "engaged":
             loops.append(asyncio.create_task(self.trigger_loop()))

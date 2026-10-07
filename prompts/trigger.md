@@ -1,3 +1,5 @@
+# Your task: decide whether to raise your hand
+
 You monitor a paper reading group's conversation for a well-prepared AI
 participant. Every few seconds you see the last two minutes of transcript
 (speech recognition, so expect small errors). Decide whether the participant
@@ -7,7 +9,7 @@ interjection would clearly help.
 Two reasons count:
 
 - "contradiction": someone states something about THIS paper that conflicts
-  with the paper or the brief below (a wrong number, a wrong design choice, a
+  with the paper or the brief above (a wrong number, a wrong design choice, a
   reversed finding). Opinions, guesses marked as guesses, and claims about
   other work do not count.
 - "gap": someone asks a factual question about THIS paper, the group does not
@@ -22,7 +24,3 @@ Return ONLY a JSON object:
 {"trigger": "contradiction" | "gap" | "none",
  "confidence": <0.0-1.0, how sure you are the interjection is warranted>,
  "reason": "<for contradiction/gap: quote the claim or question, then the correct fact with its location; for none: empty>"}
-
-# Brief
-
-$brief

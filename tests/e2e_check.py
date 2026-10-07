@@ -93,13 +93,15 @@ def check_ask(events, meta, turns, max_latency) -> list[tuple[bool, str]]:
             continue
         a = cands[0]
         matched.add(a["id"])
-        terms_ok = [term for term in ev["expect_terms"] if norm(term) in norm(a["text"])]
-        res.append((len(terms_ok) == len(ev["expect_terms"]),
-                    f"{ev['id']}: expected terms {ev['expect_terms']} found {terms_ok}"))
+        # each expected term may list alternatives: "15.656|15.66"
+        groups = [t.split("|") for t in ev["expect_terms"]]
+        found = [next((alt for alt in g if norm(alt) in norm(a["text"])), None) for g in groups]
+        res.append((all(found), f"{ev['id']}: expected {ev['expect_terms']} found {found}"))
         res.append((bool(a["cited"]), f"{ev['id']}: cited={a['cited']}"))
-        res.append((a["latency_s"] <= max_latency,
-                    f"{ev['id']}: on screen {a['latency_s']:.1f}s after question end (llm {a['llm_s']:.1f}s, "
-                    f"first token {a.get('first_token_s')}s) <= {max_latency}s"))
+        fw = a.get("first_words_s")
+        res.append((fw is not None and fw <= max_latency,
+                    f"{ev['id']}: first words on screen {fw}s after question end (<= {max_latency}s); "
+                    f"complete answer {a['latency_s']:.1f}s"))
         res.append((True, f"{ev['id']}: Q={a['question']!r}\n        A={a['text']!r}"))
     extra = [a for a in answers if a["id"] not in matched]
     res.append((not extra, f"no spurious answers ({len(extra)} extra: {[a['question'] for a in extra]})"))
