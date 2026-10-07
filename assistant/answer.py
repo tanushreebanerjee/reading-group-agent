@@ -56,7 +56,7 @@ class Answerer:
 
     def build(self, prompt_name: str, question: str, transcript: str, **extra) -> tuple[str, str, list[str]]:
         excerpts, sources = self.excerpts(f"{question} {extra.get('reason', '')}")
-        system = load_prompt(self.cfg, prompt_name, name=self.cfg.get("assistant_name", "Atlas"),
+        system = load_prompt(self.cfg, prompt_name, name=self.cfg.get("assistant_name", "Sherlock"),
                              max_sentences=self.max_sentences, brief=self.brief, excerpts=excerpts)
         user = load_prompt(self.cfg, f"{prompt_name}_user", transcript=transcript or "(none)",
                            question=question, **extra)

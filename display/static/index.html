@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reading Group Assistant</title>
+<style>
+  :root {
+    --bg: #0e1116; --fg: #e9edf2; --muted: #8a94a3; --accent: #6cb6ff;
+    --hand: #f2c14e; --hand-bg: #2a2410; --contra: #ff7b72; --gap: #6cb6ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  body { display: flex; flex-direction: column; padding: 3vh 4vw; }
+  header { display: flex; justify-content: space-between; align-items: center; gap: 2vw; }
+  .name { font-size: 2.2vw; font-weight: 600; letter-spacing: .02em; }
+  .name span { color: var(--muted); font-weight: 400; }
+  #hand { display: none; align-items: center; gap: 1.2vw; padding: 1vh 1.6vw; border-radius: 999px;
+    background: var(--hand-bg); border: 2px solid var(--hand); color: var(--hand); font-size: 2vw; }
+  #hand.on { display: flex; animation: pulse 2s ease-in-out infinite; }
+  #hand .type { font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+  #hand.contradiction .type { color: var(--contra); }
+  #hand.gap .type { color: var(--gap); }
+  #hand button { font: inherit; font-size: 1.3vw; padding: .5vh 1.1vw; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--hand); background: transparent; color: var(--fg); }
+  #hand button:hover { background: #3a3218; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 .6vw rgba(242,193,78,.15); } }
+  main { flex: 1; display: flex; flex-direction: column; justify-content: center; min-height: 0; }
+  #label { color: var(--muted); font-size: 1.6vw; margin-bottom: 2vh; }
+  #question { color: var(--muted); font-size: 2vw; font-style: italic; margin-bottom: 2.5vh; }
+  #answer { font-size: 3.6vw; line-height: 1.35; max-width: 85vw; overflow: hidden; }
+  #answer.interjection { border-left: .5vw solid var(--hand); padding-left: 2vw; }
+  #answer.idle { color: var(--muted); font-size: 2.4vw; }
+  footer { display: flex; gap: 2.5vw; color: var(--muted); font-size: 1.2vw; }
+  .dot { display: inline-block; width: .8vw; height: .8vw; border-radius: 50%; background: #555; margin-right: .5vw; }
+  .dot.on { background: #3fb950; }
+  kbd { border: 1px solid #444; border-radius: 4px; padding: 0 .4vw; }
+  @media (max-width: 700px) {
+    body { padding: 16px; }
+    .name { font-size: 20px; } #hand { font-size: 16px; } #hand button { font-size: 14px; }
+    #answer { font-size: 24px; } #question, #label { font-size: 16px; } footer { font-size: 12px; flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="name" id="name">Sherlock <span>· reading group assistant</span></div>
+  <div id="hand" aria-live="polite">
+    <span>✋</span><span class="type" id="hand-type"></span><span id="hand-count"></span>
+    <button id="reveal" title="R">Reveal</button><button id="dismiss" title="D">Dismiss</button>
+  </div>
+</header>
+<main>
+  <div id="label"></div>
+  <div id="question"></div>
+  <div id="answer" class="idle">Waiting for a question…</div>
+</main>
+<footer>
+  <span><span class="dot" id="dot"></span><span id="listening">connecting</span></span>
+  <span id="mode">mode: –</span>
+  <span id="latency">last answer: –</span>
+  <span><kbd>R</kbd> reveal · <kbd>D</kbd> dismiss</span>
+</footer>
+<script>
+const $ = id => document.getElementById(id);
+let ws, answerId = null;
+
+function connect() {
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => { $("listening").textContent = "connected"; };
+  ws.onclose = () => { $("dot").className = "dot"; $("listening").textContent = "disconnected, retrying"; setTimeout(connect, 1500); };
+  ws.onmessage = ev => handle(JSON.parse(ev.data));
+}
+
+function setAnswer(text, cls) {
+  const a = $("answer");
+  a.className = cls || "";
+  a.textContent = text;
+}
+
+function handle(m) {
+  switch (m.type) {
+    case "status":
+      $("dot").className = "dot" + (m.listening ? " on" : "");
+      $("listening").textContent = m.listening ? `listening (${m.source})` : "not listening";
+      $("mode").textContent = "mode: " + m.mode;
+      if (m.name) $("name").firstChild.textContent = m.name + " ";
+      if (m.latency_s != null) $("latency").textContent = `last answer: ${m.latency_s.toFixed(1)} s`;
+      break;
+    case "answer_start":
+      answerId = m.id; $("label").textContent = "Answer";
+      $("question").textContent = m.question ? `“${m.question}”` : "";
+      setAnswer(m.text || "…");
+      break;
+    case "answer_delta":
+      if (m.id !== answerId) break;
+      if ($("answer").textContent === "…") $("answer").textContent = "";
+      $("answer").textContent += m.text;
+      break;
+    case "answer_done":
+      answerId = m.id; $("label").textContent = "Answer";
+      if (m.question !== undefined) $("question").textContent = m.question ? `“${m.question}”` : "";
+      setAnswer(m.text);
+      if (m.latency_s != null) $("latency").textContent = `last answer: ${m.latency_s.toFixed(1)} s`;
+      break;
+    case "hand_raised":
+    case "hand_cleared": {
+      const h = $("hand");
+      if (m.count > 0) {
+        h.className = "on " + (m.trigger || "");
+        $("hand-type").textContent = m.trigger || "";
+        $("hand-count").textContent = m.count > 1 ? `(${m.count})` : "";
+      } else { h.className = ""; }
+      break;
+    }
+    case "hand_revealed":
+      $("label").textContent = `Raised hand · ${m.trigger}`;
+      $("question").textContent = "";
+      setAnswer(m.text, "interjection");
+      break;
+  }
+}
+
+function act(action) { if (ws && ws.readyState === 1) ws.send(JSON.stringify({action})); }
+$("reveal").onclick = () => act("reveal");
+$("dismiss").onclick = () => act("dismiss");
+document.addEventListener("keydown", e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === "r" || e.key === "R") act("reveal");
+  if (e.key === "d" || e.key === "D") act("dismiss");
+});
+connect();
+</script>
+</body>
+</html>

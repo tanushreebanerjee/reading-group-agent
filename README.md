@@ -3,7 +3,7 @@
 An AI participant for an in-person paper reading group. It listens to the
 meeting through the room's Zoom call and shows answers on a local web page
 that is screen-shared to the room display. In `ask` mode it answers when
-addressed by name ("Atlas, ..."). In `engaged` mode it also quietly raises a
+addressed by name ("Sherlock, ..."). In `engaged` mode it also quietly raises a
 hand when it spots a contradiction with the paper or a factual question the
 group can't resolve. Nothing is shown until someone presses Reveal.
 
@@ -88,7 +88,7 @@ python tests/fixtures/make_synthetic.py     # regenerate the synthetic meeting (
 
 `tests/fixtures/synthetic_script.md` is the ground truth for
 `tests/fixtures/synthetic.wav`. It is a 5-minute, 3-voice discussion of
-`papers/test.pdf` with two questions addressed to Atlas, one wrong claim,
+`papers/test.pdf` with two questions addressed to Sherlock, one wrong claim,
 and one unanswered factual question.
 
 ## Configuration

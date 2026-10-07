@@ -1,9 +1,9 @@
 # Reading Group Assistant configuration. Every tunable lives here.
 # CLI flags (e.g. --mode, --speed) override individual values at runtime.
 
-assistant_name: Atlas
+assistant_name: Sherlock
 # Extra spellings STT tends to produce for the name. Matched fuzzily.
-name_aliases: [atlas, atlus, adlas, atlis, attlas, at las]
+name_aliases: [sherlock, sherlok, shirlock, sherlocke, sher lock, share lock, sure lock, shylock]
 # Only look for the name in the first N words of a segment (or right after hey/ok/so).
 name_search_words: 8
 name_match_ratio: 80
@@ -27,7 +27,7 @@ stt:
 llm:
   prep:
     backend: claude-cli
-    model: sonnet
+    model: opus             # strongest on the Claude Code login; prep runs once per paper
     timeout_s: 600
   answer:
     backend: ollama

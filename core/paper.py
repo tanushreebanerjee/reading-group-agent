@@ -133,7 +133,7 @@ def tokenize(text: str) -> list[str]:
 
 STOP = set("the a an of to in and or is are was were be for on with by as at that this it its from "
            "what which how why does do did they their them we our you your about can could would "
-           "should hey atlas so ok okay".split())
+           "should hey so ok okay".split())
 
 
 class BM25:

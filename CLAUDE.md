@@ -87,7 +87,7 @@ It never makes decisions and never interrupts on its own.
 
 All tunables live in `config.yaml`. Nothing below is hardcoded.
 
-- `assistant_name` (default "Atlas"; pick something STT transcribes reliably)
+- `assistant_name` (default "Sherlock"; pick something STT transcribes reliably)
 - `audio_device` (default "BlackHole 2ch")
 - `mode`: ask | engaged
 - `stt_backend`: faster-whisper (default) | deepgram; whisper model size

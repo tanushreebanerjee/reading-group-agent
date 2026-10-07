@@ -54,11 +54,11 @@ def main():
     chunk = audio[int(30 * 16000):int(40 * 16000)]
     from audio.stt import FasterWhisperSTT
 
-    print(f"{'model':<18}{'load s':>8}{'file RTF':>10}{'10s chunk s':>13}{'WER':>8}{'Atlas':>7}")
+    print(f"{'model':<18}{'load s':>8}{'file RTF':>10}{'10s chunk s':>13}{'WER':>8}{'Name':>7}")
     for m in models:
         cfg = load_config(overrides={"stt": {"model": m}})
         t0 = time.time()
-        stt = FasterWhisperSTT(cfg, hotwords="Atlas", initial_prompt="Reading group discussion with Atlas.")
+        stt = FasterWhisperSTT(cfg, hotwords=cfg["assistant_name"], initial_prompt=f"Reading group discussion with {cfg['assistant_name']}.")
         load = time.time() - t0
         t0 = time.time()
         segs = stt.transcribe(audio)
@@ -68,7 +68,7 @@ def main():
         lat = time.time() - t0
         hyp_text = " ".join(s.text for s in segs)
         hyp = words(hyp_text)
-        n_atlas = len(re.findall(r"\batlas\b", hyp_text.lower()))
+        n_atlas = len(re.findall(rf"\b{cfg['assistant_name'].lower()}\b", hyp_text.lower()))
         print(f"{m:<18}{load:>8.1f}{rtf:>10.3f}{lat:>13.2f}{wer(ref, hyp):>8.1%}{n_atlas:>5}/2", flush=True)
         (FIX.parent.parent / "meetings" / ".cache").mkdir(parents=True, exist_ok=True)
         (ROOT / "meetings" / ".cache" / f"bench_{m}.txt").write_text(hyp_text)

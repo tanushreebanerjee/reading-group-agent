@@ -44,183 +44,183 @@
  {
   "turn": 7,
   "speaker": "Priya",
-  "text": "Not off the top of my head. Atlas, what PSNR does G L D get on RealEstate ten K, compared to the VAE baseline?",
+  "text": "Not off the top of my head. Sherlock, what PSNR does G L D get on RealEstate ten K, compared to the VAE baseline?",
   "start": 65.0,
-  "end": 72.8
+  "end": 72.86
  },
  {
   "turn": 8,
   "speaker": "Tom",
   "text": "While that comes up, the other piece is that the features have to be decoded back to pixels. They train a separate RGB decoder on top of the geometric features.",
-  "start": 75.3,
-  "end": 84.68
+  "start": 75.36,
+  "end": 84.73
  },
  {
   "turn": 9,
   "speaker": "Kate",
   "text": "Yes, and they can decode depth as well, which is a nice side effect. You get geometry for free with every generated view.",
-  "start": 85.91,
-  "end": 93.14
+  "start": 85.96,
+  "end": 93.2
  },
  {
   "turn": 10,
   "speaker": "Priya",
   "text": "So the model doesn't generate every level of the feature hierarchy. Depth Anything gives features at four levels, and they only synthesize up to a boundary level.",
-  "start": 94.69,
-  "end": 103.43
+  "start": 94.75,
+  "end": 103.49
  },
  {
   "turn": 11,
   "speaker": "Tom",
   "text": "Right, and the rest of the network just runs on top of that. The question is where to put the boundary.",
-  "start": 104.69,
-  "end": 110.48
+  "start": 104.75,
+  "end": 110.54
  },
  {
   "turn": 12,
   "speaker": "Kate",
   "text": "And they found that the deepest level, level three, works best as the synthesis boundary, because the deep features are the most abstract and the most geometric. That's the main ablation.",
-  "start": 111.76,
-  "end": 122.22
+  "start": 111.82,
+  "end": 122.28
  },
  {
   "turn": 13,
   "speaker": "Tom",
   "text": "Makes sense to me. Abstract features should be easier for the diffusion model.",
-  "start": 123.76,
-  "end": 128.15
+  "start": 123.82,
+  "end": 128.21
  },
  {
   "turn": 14,
   "speaker": "Priya",
   "text": "Okay. Let's talk about the evaluation setup, because I think that's where the skeptic in me wakes up.",
-  "start": 130.01,
-  "end": 135.95
+  "start": 130.07,
+  "end": 136.01
  },
  {
   "turn": 15,
   "speaker": "Tom",
   "text": "They evaluate on RealEstate and DL3DV in domain, and Mip NeRF 360 out of domain. But RealEstate and DL3DV are also in the training data.",
-  "start": 137.25,
-  "end": 147.75
+  "start": 137.31,
+  "end": 147.81
  },
  {
   "turn": 16,
   "speaker": "Kate",
   "text": "That's fair, although MVGenMaster also leans on an external depth estimator and isn't trained from scratch, so it cuts both ways.",
-  "start": 149.13,
-  "end": 157.26
+  "start": 149.19,
+  "end": 157.32
  },
  {
   "turn": 17,
   "speaker": "Priya",
   "text": "Here's something I couldn't figure out. How many source views do they use in the main evaluation? Is it one view or several?",
-  "start": 158.96,
-  "end": 165.88
+  "start": 159.02,
+  "end": 165.93
  },
  {
   "turn": 18,
   "speaker": "Tom",
   "text": "Hmm. I honestly don't remember. Kate, do you know?",
-  "start": 167.83,
-  "end": 171.46
+  "start": 167.89,
+  "end": 171.52
  },
  {
   "turn": 19,
   "speaker": "Kate",
   "text": "No idea. It's probably buried in the setup section somewhere. Let's not get stuck on it.",
-  "start": 174.46,
-  "end": 179.96
+  "start": 174.52,
+  "end": 180.02
  },
  {
   "turn": 20,
   "speaker": "Priya",
   "text": "Fine, let's move on. The other thing I wanted to discuss is the training compute.",
-  "start": 181.47,
-  "end": 186.32
+  "start": 181.53,
+  "end": 186.38
  },
  {
   "turn": 21,
   "speaker": "Tom",
   "text": "They train on eight B two hundreds, for about a hundred and seventy five thousand iterations. Not cheap, but they do train from scratch on four datasets.",
-  "start": 188.3,
-  "end": 197.58
+  "start": 188.36,
+  "end": 197.64
  },
  {
   "turn": 22,
   "speaker": "Kate",
-  "text": "Hey Atlas, why did they need a separate cascaded model for level zero?",
-  "start": 198.82,
-  "end": 203.05
+  "text": "Hey Sherlock, why did they need a separate cascaded model for level zero?",
+  "start": 198.88,
+  "end": 203.13
  },
  {
   "turn": 23,
   "speaker": "Priya",
   "text": "Good question, I was wondering about that too. It seems like extra machinery.",
-  "start": 205.55,
-  "end": 210.15
+  "start": 205.63,
+  "end": 210.23
  },
  {
   "turn": 24,
   "speaker": "Tom",
   "text": "My guess is quality, but let's see what it says. Meanwhile, what did people think about the limitations section?",
-  "start": 211.58,
-  "end": 218.67
+  "start": 211.67,
+  "end": 218.75
  },
  {
   "turn": 25,
   "speaker": "Kate",
   "text": "It's short. They admit it can hallucinate content in regions the source views never saw, for example with heavy occlusion, and that extreme lighting changes make correspondences unreliable.",
-  "start": 219.98,
-  "end": 230.79
+  "start": 220.07,
+  "end": 230.87
  },
  {
   "turn": 26,
   "speaker": "Priya",
   "text": "I'd also like to know how it scales with more source views. The ablation goes from one to four views, and on RealEstate the gap to the VAE shrinks a bit.",
-  "start": 232.08,
-  "end": 240.38
+  "start": 232.16,
+  "end": 240.46
  },
  {
   "turn": 27,
   "speaker": "Kate",
   "text": "Another open question for me is whether this works with a stronger video prior. Everything here is trained from scratch, so we don't know if it combines well with a large pretrained generator.",
-  "start": 241.83,
-  "end": 251.92
+  "start": 241.91,
+  "end": 252.01
  },
  {
   "turn": 28,
   "speaker": "Tom",
   "text": "Agreed. And I'd want a runtime comparison. Sampling in a feature space with several levels might not be cheaper than a VAE at inference time, even if training converges faster.",
-  "start": 253.78,
-  "end": 264.16
+  "start": 253.86,
+  "end": 264.24
  },
  {
   "turn": 29,
   "speaker": "Priya",
   "text": "They do have a computational cost section in the appendix, I think, but I only skimmed it. Let's each look at that before the next meeting.",
-  "start": 265.5,
-  "end": 273.25
+  "start": 265.59,
+  "end": 273.33
  },
  {
   "turn": 30,
   "speaker": "Kate",
   "text": "One last thing I liked: the depth they decode is consistent with the generated images, so you can unproject the views into a point cloud and it actually looks coherent.",
-  "start": 274.91,
-  "end": 284.27
+  "start": 274.99,
+  "end": 284.35
  },
  {
   "turn": 31,
   "speaker": "Tom",
   "text": "That's a good open question for the authors too, how far the geometry holds up with wider baselines. Should we wrap up there and pick next week's paper?",
-  "start": 285.98,
-  "end": 294.81
+  "start": 286.06,
+  "end": 294.89
  },
  {
   "turn": 32,
   "speaker": "Priya",
   "text": "Sounds good. Thanks everyone.",
-  "start": 296.31,
-  "end": 298.31
+  "start": 296.39,
+  "end": 298.39
  }
 ]

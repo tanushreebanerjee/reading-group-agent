@@ -38,7 +38,7 @@ Re-read this when resuming work. Plan: Phases 0–5 from `CLAUDE.md`.
   section heading.
 - **Synthetic fixture:** made with `say` voices Samantha (Priya), Daniel (Tom),
   and Karen (Kate) at 165 wpm. Pauses between turns are 1.2–2.0 s, with 2.5 s
-  after questions to Atlas and 3.0 s after the planted stall. Turn timings
+  after questions to Sherlock and 3.0 s after the planted stall. Turn timings
   are in `tests/fixtures/synthetic_turns.json`. `synthetic.wav` is committed
   (gitignore exception).
 

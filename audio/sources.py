@@ -20,7 +20,7 @@ from core.transcript import Segment, read_jsonl, write_jsonl
 
 
 def _stt_prompt(cfg: dict, paper_title: str | None) -> str:
-    name = cfg.get("assistant_name", "Atlas")
+    name = cfg.get("assistant_name", "Sherlock")
     prompt = f"Reading group discussion with {name}."
     if paper_title:
         prompt += f" Paper: {paper_title}."
