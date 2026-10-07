@@ -179,5 +179,22 @@ class Retriever:
         return "\n\n".join(f"{c.label} {c.text}" for c in chunks)
 
 
+TERM_RE = re.compile(r"\b(?:[A-Z][a-z]*[A-Z0-9][A-Za-z0-9]*|[A-Z]{2,}[a-z]?)(?:-[A-Za-z0-9]+)*\b")
+TERM_SKIP = {"PDF", "ID", "OK", "II", "III", "IV", "URL", "GPU", "GPUs", "CVPR", "ICCV", "ECCV", "ICLR",
+             "NeurIPS", "ICML", "arXiv", "In", "Fig", "Tab", "Sec", "Eq", "GT"}
+
+
+def key_terms(paper: Paper, n: int = 25) -> list[str]:
+    """Acronyms and mixed-case jargon (VAE, DL3DV, RealEstate10K), most frequent first.
+
+    Used to prime speech recognition with the paper's vocabulary.
+    """
+    body = paper.full_text
+    if "References" in body:
+        body = body[: body.rfind("References")]
+    counts = Counter(t for t in TERM_RE.findall(body) if t not in TERM_SKIP and len(t) <= 20)
+    return [t for t, c in counts.most_common(n) if c >= 3]
+
+
 def chunk_to_dict(c: Chunk) -> dict:
     return asdict(c)

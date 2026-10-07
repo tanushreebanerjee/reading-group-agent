@@ -37,7 +37,8 @@ def main(argv=None):
     cfg = load_config(args.config, overrides)
 
     from assistant.app import App, log
-    from audio.sources import make_source
+    from audio.sources import make_source, stt_prompt
+    from core.paper import key_terms
     from log.events import new_meeting_dir
 
     paper_path = Path(args.paper)
@@ -53,7 +54,7 @@ def main(argv=None):
     meeting_dir = Path(args.meeting_dir) if args.meeting_dir else new_meeting_dir(cfg["paths"]["meetings_dir"])
     meeting_dir.mkdir(parents=True, exist_ok=True)
     source = make_source(cfg, replay=args.replay, speed=args.speed, record=args.record,
-                         record_dir=meeting_dir, paper_title=paper.title)
+                         record_dir=meeting_dir, prompt=stt_prompt(cfg, paper.title, key_terms(paper)))
     hold = args.hold if args.hold is not None else (10.0 if args.replay else 0.0)
     app = App(cfg, source, paper, brief, meeting_dir, hold_s=hold)
     try:

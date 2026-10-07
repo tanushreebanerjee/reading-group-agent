@@ -8,7 +8,7 @@ Re-read this when resuming work. Plan: Phases 0–5 from `CLAUDE.md`.
 |---|---|---|
 | 0 Skeleton | done | `python -m audio --list-devices` shows BlackHole 2ch; `pytest` green; `synthetic.wav` 5.0 min |
 | 1 Prep brief | done | `python -m prep papers/test.pdf` -> `briefs/test/brief.md` (935 words); all 8 key-number rows verified on cited page by `prep.verify`, Tables 2/3 hand-checked |
-| 2 Transcript | todo | |
+| 2 Transcript | done | `python -m audio --replay tests/fixtures/synthetic.wav --speed 4 --paper papers/test.pdf` streams a readable transcript; `tests/transcript_wer.py`: WER 7.5%, name heard 2/2 |
 | 3 Ask + display | todo | |
 | 4 Meeting log | todo | |
 | 5 Engaged mode | todo | |
@@ -51,6 +51,35 @@ Re-read this when resuming work. Plan: Phases 0–5 from `CLAUDE.md`.
   `prep.verify` checks every Key-numbers row against the PDF text of the cited
   page and appends a warning to the brief if any row fails.
 
+- **Prep model:** `claude -p --model opus` (switched from sonnet at the user's
+  request for best quality; prep runs once per paper, about 5 min). The Opus
+  brief is 1,028 words after two condense passes, slightly over the 900 target
+  but within the ~2-page limit.
+- **Assistant name:** **Sherlock** (user's choice). Aliases include sherlok,
+  shirlock, and "sure lock". Two-word aliases only match near-exactly and never
+  after a determiner ("the lock-step" must not match). Single-word matches are
+  ignored after a determiner.
+- **STT model:** benchmarked on the fixture (`tests/stt_bench.py`, M4 CPU,
+  int8, 4 threads):
+
+  | model | file RTF | 10 s chunk | WER | name |
+  |---|---|---|---|---|
+  | small.en | 0.15 | 2.8 s | 7.5% | 2/2 |
+  | medium.en | 0.43 | 8.7 s | 6.6% | 2/2 |
+  | distil-large-v3 | 0.44 | 11.6 s | 6.7% | 2/2 |
+  | large-v3-turbo | > 3 (stopped) | – | – | – |
+
+  small.en is the default: bigger models gain about 1 point of WER at roughly
+  3× the latency. faster-whisper has no Apple GPU support. If live accuracy
+  is a problem, add an `mlx-whisper` backend.
+- **STT priming:** the Whisper `initial_prompt` is the name, the paper title,
+  and about 25 acronyms/jargon terms pulled from the paper (`key_terms`).
+  Replay transcripts are cached in `meetings/.cache/` keyed by WAV, prompt,
+  and model.
+- **Replay timing:** segments are emitted at their `end` time on a SimClock,
+  and every timer (question pause, trigger interval, cooldown) runs in
+  meeting time, so `--speed N` scales everything consistently.
+
 ## How to run
 
 See README. Phase 0: `python -m audio --list-devices`, `pytest -q`,
@@ -58,7 +87,10 @@ See README. Phase 0: `python -m audio --list-devices`, `pytest -q`,
 
 ## Known issues
 
-- (none yet)
+- The synthetic `say` voice pronounces "VAE" so Whisper writes "V"; this is a
+  TTS artifact, and real speech should be fine (vocabulary priming is on).
+- Live chunking uses a simple energy VAD (`stt.energy_threshold`). It is
+  untested on real room audio and may need tuning for Zoom levels.
 
 ## Needs a human to test live
 

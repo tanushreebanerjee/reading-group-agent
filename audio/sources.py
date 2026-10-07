@@ -19,26 +19,29 @@ from core.clock import RealClock, SimClock
 from core.transcript import Segment, read_jsonl, write_jsonl
 
 
-def _stt_prompt(cfg: dict, paper_title: str | None) -> str:
+def stt_prompt(cfg: dict, paper_title: str | None = None, terms: list[str] | None = None) -> str:
+    """Whisper initial prompt: the assistant's name, paper title, and the paper's jargon."""
     name = cfg.get("assistant_name", "Sherlock")
     prompt = f"Reading group discussion with {name}."
     if paper_title:
         prompt += f" Paper: {paper_title}."
+    if terms:
+        prompt += " Terms: " + ", ".join(terms) + "."
     return prompt
 
 
 class ReplaySource:
     """Transcribe a WAV once (cached), then emit segments at their end time on a SimClock."""
 
-    def __init__(self, cfg: dict, path: str, speed: float = 1.0, paper_title: str | None = None):
+    def __init__(self, cfg: dict, path: str, speed: float = 1.0, prompt: str | None = None):
         self.cfg = cfg
         self.path = Path(path)
         self.clock = SimClock(speed)
-        self.paper_title = paper_title
+        self.prompt = prompt or stt_prompt(cfg)
         self.done = False
 
     def cache_path(self) -> Path:
-        h = hashlib.sha1(self.path.read_bytes()).hexdigest()[:12]
+        h = hashlib.sha1(self.path.read_bytes() + self.prompt.encode()).hexdigest()[:12]
         model = self.cfg["stt"].get("model", "model").replace("/", "_")
         return Path(self.cfg["paths"]["cache_dir"]) / f"{self.path.stem}.{h}.{model}.jsonl"
 
@@ -51,8 +54,7 @@ class ReplaySource:
         print(f"[audio] transcribing {self.path} with {self.cfg['stt']['model']} (cached afterwards)...",
               file=sys.stderr)
         t0 = time.time()
-        stt = make_stt(self.cfg, hotwords=self.cfg.get("assistant_name"),
-                       initial_prompt=_stt_prompt(self.cfg, self.paper_title))
+        stt = make_stt(self.cfg, hotwords=self.cfg.get("assistant_name"), initial_prompt=self.prompt)
         segs = stt.transcribe_file(str(self.path))
         cache.parent.mkdir(parents=True, exist_ok=True)
         write_jsonl(cache, segs)
@@ -130,7 +132,7 @@ class Chunker:
 
 
 class LiveSource:
-    def __init__(self, cfg: dict, record_path: Path | None = None, paper_title: str | None = None):
+    def __init__(self, cfg: dict, record_path: Path | None = None, prompt: str | None = None):
         from audio.devices import find_input
 
         self.cfg = cfg
@@ -143,7 +145,7 @@ class LiveSource:
         self.chunker = Chunker(self.sr, float(s.get("silence_s", 0.6)), float(s.get("chunk_max_s", 10)),
                                float(s.get("energy_threshold", 0.008)))
         self.record_path = record_path
-        self.paper_title = paper_title
+        self.prompt = prompt or stt_prompt(cfg)
         self._transcribing = 0
         self.done = False
 
@@ -156,8 +158,7 @@ class LiveSource:
         from audio.recorder import WavRecorder
         from audio.stt import make_stt
 
-        stt = await asyncio.to_thread(make_stt, self.cfg, self.cfg.get("assistant_name"),
-                                      _stt_prompt(self.cfg, self.paper_title))
+        stt = await asyncio.to_thread(make_stt, self.cfg, self.cfg.get("assistant_name"), self.prompt)
         loop = asyncio.get_running_loop()
         q: asyncio.Queue = asyncio.Queue()
         rec = WavRecorder(self.record_path, self.sr_in) if self.record_path else None
@@ -208,12 +209,12 @@ class LiveSource:
 
 
 def make_source(cfg: dict, replay: str | None = None, speed: float = 1.0, record: bool = False,
-                record_dir: Path | None = None, paper_title: str | None = None):
+                record_dir: Path | None = None, prompt: str | None = None):
     if replay:
-        return ReplaySource(cfg, replay, speed, paper_title=paper_title)
+        return ReplaySource(cfg, replay, speed, prompt=prompt)
     record_path = None
     if record:
         record_dir = Path(record_dir or cfg["paths"]["meetings_dir"])
         record_dir.mkdir(parents=True, exist_ok=True)
         record_path = record_dir / f"recording_{time.strftime('%H%M%S')}.wav"
-    return LiveSource(cfg, record_path=record_path, paper_title=paper_title)
+    return LiveSource(cfg, record_path=record_path, prompt=prompt)

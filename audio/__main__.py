@@ -26,11 +26,12 @@ def parse_args(argv=None):
     ap.add_argument("--device", default=None)
     ap.add_argument("--stt-model", default=None)
     ap.add_argument("--out", default=None, help="transcript JSONL path")
+    ap.add_argument("--paper", default=None, help="paper PDF: primes speech recognition with its vocabulary")
     return ap.parse_args(argv)
 
 
 async def run(args, cfg):
-    from audio.sources import make_source
+    from audio.sources import make_source, stt_prompt
 
     out = Path(args.out) if args.out else (
         Path(cfg["paths"]["meetings_dir"]) / dt.date.today().isoformat() / "transcript_audio_only.jsonl")
@@ -38,8 +39,14 @@ async def run(args, cfg):
     if out.exists():
         out.unlink()
     store = TranscriptStore(out)
+    prompt = None
+    if args.paper:
+        from core.paper import key_terms, load_paper
+
+        paper = load_paper(args.paper, cache_dir=cfg["paths"]["cache_dir"])
+        prompt = stt_prompt(cfg, paper.title, key_terms(paper))
     source = make_source(cfg, replay=args.replay, speed=args.speed, record=args.record,
-                         record_dir=out.parent)
+                         record_dir=out.parent, prompt=prompt)
     try:
         async for seg in source.segments():
             store.add(seg)
