@@ -35,7 +35,7 @@ def labels_for(meeting_dir: Path) -> dict[str, str]:
     for ev in read_events(meeting_dir / "events.jsonl"):
         if ev["kind"] in ("hand", "trigger"):
             good = any(ev["trigger"] == k and t0 <= ev["t"] <= t0 + 90 and
-                       all(any(a.lower() in ev["reason"].lower() for a in g) for g in terms)
+                       all(any(a.lower() in (ev.get("quote", "") + " " + ev["reason"]).lower() for a in g) for g in terms)
                        for k, t0, terms in planted)
             out[ev["id"]] = "yes" if good else "no"
         elif ev["kind"] == "answer":

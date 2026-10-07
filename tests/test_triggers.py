@@ -24,3 +24,8 @@ def test_confidence_clamped_and_percent():
 def test_garbage_is_invalid():
     r = parse_trigger("I think nothing to flag")
     assert not r.valid and r.trigger == "none"
+
+
+def test_quote_parsed():
+    r = parse_trigger('{"trigger":"gap","quote":"How many source views?","confidence":0.8,"reason":"N=2 (5.1)"}')
+    assert r.quote == "How many source views?"

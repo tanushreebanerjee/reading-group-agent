@@ -98,7 +98,8 @@ def render(cfg: dict, meeting_dir: Path, info: dict, segs: list[Segment], summar
         status = h.get("status", "pending")
         L.append(f"### {h['id']} · {fmt_ts(h['t'])} · {h['trigger']} · confidence {h['confidence']:.2f} · {status}")
         L.append(f"<!-- id={h['id']} kind=hand type={h['trigger']} conf={h['confidence']:.3f} status={status} -->")
-        L += [f"**Why the hand went up:** {h['reason']}", "", f"**Prepared interjection:** {h['text']}", ""]
+        L += [f"**Heard:** \"{h.get('quote', '')}\"", "", f"**Why the hand went up:** {h['reason']}", "",
+              f"**Prepared interjection:** {h['text']}", ""]
         L += ["**Context:**", _context(segs, h["t"] - ctx_s, h["t"]), "", HELPFUL, ""]
 
     L += ["## Triggers that did not raise a hand", "",
@@ -110,7 +111,7 @@ def render(cfg: dict, meeting_dir: Path, info: dict, segs: list[Segment], summar
         L.append(f"### {t['id']} · {fmt_ts(t['t'])} · {t['trigger']} · confidence {t['confidence']:.2f} · {t['outcome']}")
         L.append(f"<!-- id={t['id']} kind=trigger type={t['trigger']} conf={t['confidence']:.3f} "
                  f"outcome={t['outcome']} -->")
-        L += [f"**Reason:** {t['reason']}", ""]
+        L += [f"**Heard:** \"{t.get('quote', '')}\"", "", f"**Reason:** {t['reason']}", ""]
         L += ["**Context:**", _context(segs, t["t"] - ctx_s, t["t"]), "", HELPFUL, ""]
     if info["skips"]:
         L += [f"_{info['skips']} trigger checks were skipped because an answer was in progress._", ""]

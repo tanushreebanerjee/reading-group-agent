@@ -67,7 +67,7 @@ class Answerer:
         return Retriever.format(chunks), [c.label for c in chunks]
 
     def build(self, prompt_name: str, question: str, transcript: str, **extra) -> tuple[str, str, list[str]]:
-        excerpts, sources = self.excerpts(f"{question} {extra.get('reason', '')}")
+        excerpts, sources = self.excerpts(question)
         system = system_prompt(self.cfg, self.brief, prompt_name, max_sentences=self.max_sentences)
         user = load_prompt(self.cfg, f"{prompt_name}_user", excerpts=excerpts, transcript=transcript or "(none)",
                            question=question, **extra)

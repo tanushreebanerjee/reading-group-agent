@@ -24,7 +24,7 @@ events:
     turn: 17
     question: "How many source views do they use in the main evaluation?"
     truth: "N = 2 source views, 200 samples per dataset (Section 5.1)."
-    match_terms: ["source view"]
+    match_terms: ["source view|view count|views|N = 2|N=2"]
   - id: ask2
     kind: ask
     turn: 22

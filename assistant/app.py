@@ -180,22 +180,27 @@ class App:
                 continue
             last_seen = len(self.store.segments)
             transcript = self.recent_transcript(window)
+            name = self.cfg.get("assistant_name", "Sherlock")
+            human = [s.text for s in self.store.window(self.now, window) if s.speaker != name]
             async with self.llm_lock:
                 t0 = time.monotonic()
                 r = await asyncio.to_thread(self.checker.check, transcript, self.gate.raised_reasons)
                 took = time.monotonic() - t0
             now = self.now
-            outcome = self.gate.check(r, now)
+            # don't let slow checks crowd out answers: wait at least 1.5x the last check's duration
+            next_t = max(next_t, now + 1.5 * took * self.source.clock.speed)
+            outcome = self.gate.check(r, now, human)
             if outcome == "none":
                 log(f"    .. trigger check at {now:.0f}s: none ({took:.1f}s)")
                 continue
             self.n_triggers += 1
             tid = f"T{self.n_triggers}"
             self.events.write("trigger", id=tid, t=round(now, 2), trigger=r.trigger, confidence=r.confidence,
-                              reason=r.reason, outcome=outcome, llm_s=round(took, 2),
+                              reason=r.reason, quote=r.quote, outcome=outcome, llm_s=round(took, 2),
                               raw=r.raw if outcome == "invalid" else None,
                               window_start=round(max(0.0, now - window), 2))
-            log(f"    .. trigger {tid} at {now:.0f}s: {r.trigger} {r.confidence:.2f} -> {outcome} ({took:.1f}s): {r.reason}")
+            log(f"    .. trigger {tid} at {now:.0f}s: {r.trigger} {r.confidence:.2f} -> {outcome} ({took:.1f}s): "
+                f"{r.quote!r} | {r.reason}")
             if outcome == "raised":
                 await self.raise_hand(tid, r, now, transcript)
 
@@ -203,12 +208,13 @@ class App:
         hid = f"H{len(self.hands.hands) + 1}"
         # prepare the interjection now so Reveal is instant; it is not shown until revealed
         async with self.llm_lock:
-            res = await self.answerer.run("interjection", r.reason, transcript, trigger=r.trigger, reason=r.reason,
-                                          max_sentences=2)
+            # retrieve with the person's words plus the checker's short reason (which names the topic)
+            res = await self.answerer.run("interjection", f"{r.quote} {r.reason}", transcript, trigger=r.trigger,
+                                          reason=f'"{r.quote}" ({r.reason})', max_sentences=2)
         hand = Hand(hid, round(now, 2), tid, r.trigger, r.confidence, r.reason, res.text)
         self.hands.add(hand)
         self.events.write("hand", id=hid, t=hand.t, trigger_id=tid, trigger=r.trigger, confidence=r.confidence,
-                          reason=r.reason, text=res.text, cited=res.cited, status="pending")
+                          reason=r.reason, quote=r.quote, text=res.text, cited=res.cited, status="pending")
         log(f"    ✋ {hid} raised ({r.trigger}); prepared: {res.text}")
         await self.send_hand_state()
 

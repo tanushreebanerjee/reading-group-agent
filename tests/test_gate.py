@@ -33,3 +33,14 @@ def test_none_and_invalid():
     g = gate()
     assert g.check(R("none", 0.99), 0) == "none"
     assert g.check(TriggerResult("none", 0, "", valid=False), 0) == "invalid"
+
+
+def test_ungrounded_quote_is_rejected():
+    from assistant.triggers import quote_is_grounded
+
+    lines = ["And they found that the deepest level, level 3, works best as the synthesis boundary."]
+    assert quote_is_grounded("the deepest level, level 3, works best", lines)
+    assert not quote_is_grounded("How much of GLD's lead over DINO would remain", lines)
+    g = gate()
+    r = TriggerResult("gap", 0.95, "brief open question", quote="How much of GLD's lead over DINO would remain")
+    assert g.check(r, 0, lines) == "ungrounded"
