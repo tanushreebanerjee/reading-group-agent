@@ -109,7 +109,11 @@ with no paid keys (faster-whisper + Ollama + claude-cli).
 
 ## Engineering conventions
 
-- Python 3.11+, managed with uv. Pipecat for the live audio pipeline if it
+- Python 3.11 in a conda env named `rga`, defined in `environment.yml`
+  (conda-forge for system libs like portaudio and ffmpeg, pip section for
+  Python packages). Whenever you add a dependency, add it to
+  `environment.yml` and run `conda env update -f environment.yml --prune`.
+  Never install into base. Pipecat for the live audio pipeline if it
   fits cleanly; otherwise use sounddevice plus the Deepgram SDK directly.
   Keep it simple.
 - Every component must run against replay files without live audio.
@@ -133,7 +137,7 @@ Each phase ends with a demo command and acceptance check.
 
 0. Skeleton: repo layout, config loading, `.env`, `--list-devices`, README.
    Done when the device list shows BlackHole.
-1. Prep brief: `uv run prep papers/x.pdf` writes `brief.md`. Done when the
+1. Prep brief: `python -m prep papers/x.pdf` writes `brief.md`. Done when the
    brief for a real paper has correct key numbers with locations.
 2. Transcript: live and replay modes produce JSONL transcripts. Done when
    replaying the test WAV yields a readable transcript at `--speed 4`.

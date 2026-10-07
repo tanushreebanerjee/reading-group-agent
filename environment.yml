@@ -1,0 +1,19 @@
+name: rga
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - portaudio      # needed for live audio capture
+  - ffmpeg         # audio decoding for whisper and replay
+  - pip:
+      - faster-whisper
+      - sounddevice
+      - fastapi
+      - uvicorn
+      - pyyaml
+      - python-dotenv
+      - pypdf
+      - requests
+      - ollama
+      - pytest
