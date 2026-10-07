@@ -19,7 +19,9 @@ HELPFUL = "helpful: "
 
 
 def _context(segs: list[Segment], t0: float, t1: float) -> str:
-    lines = [f"> [{fmt_ts(s.start)}] {s.text.strip()}" for s in segs if s.end >= t0 and s.start <= t1]
+    segs = sorted(segs, key=lambda s: s.start)
+    lines = [f"> [{fmt_ts(s.start)}] {s.speaker + ': ' if s.speaker else ''}{s.text.strip()}"
+             for s in segs if s.end >= t0 and s.start <= t1]
     return "\n".join(lines) or "> (no transcript in this window)"
 
 

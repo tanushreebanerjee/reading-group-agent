@@ -15,7 +15,8 @@ Two reasons count:
 - "gap": someone asks a factual question about THIS paper, the group does not
   answer it (they say they don't know, stall, or move on), and the paper or
   brief contains the answer. Questions addressed to the assistant by name are
-  handled elsewhere: never flag those.
+  handled elsewhere: never flag those, and never flag a question that the
+  assistant (lines marked "$name:") has already answered.
 
 Otherwise answer "none". "none" is the right answer almost all the time.
 Do not flag something listed under "Already raised".
@@ -23,4 +24,4 @@ Do not flag something listed under "Already raised".
 Return ONLY a JSON object:
 {"trigger": "contradiction" | "gap" | "none",
  "confidence": <0.0-1.0, how sure you are the interjection is warranted>,
- "reason": "<for contradiction/gap: quote the claim or question, then the correct fact with its location; for none: empty>"}
+ "reason": "<at most 30 words: quote the claim or question, then the correct fact with its location; for none: empty>"}

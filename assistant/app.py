@@ -151,6 +151,9 @@ class App:
         await self.hub.send({"type": "answer_done", "id": aid, "question": question, "text": res.text,
                              "latency_s": self.last_latency, "complete_s": e2e, "cited": res.cited})
         await self.send_status()
+        # record the answer in the transcript so later prompts know the question was answered
+        self.store.add(Segment(round(q.end + 0.01, 2), round(self.now, 2), res.text,
+                               speaker=self.cfg.get("assistant_name", "Sherlock")))
         self.events.write("answer", id=aid, t=round(self.now, 2), question=question, q_start=q.start,
                           q_end=q.end, detected_t=round(detected_t, 2), text=res.text, latency_s=round(e2e, 2),
                           first_words_s=first_words and round(first_words, 2),
@@ -173,6 +176,7 @@ class App:
                 continue  # nothing new was said
             if self.answering or self.collector.collecting or self.llm_lock.locked():
                 self.events.write("trigger_skip", t=round(self.now, 2), why="busy")
+                next_t = self.now + 2.0  # retry shortly instead of losing a whole interval
                 continue
             last_seen = len(self.store.segments)
             transcript = self.recent_transcript(window)
@@ -189,6 +193,7 @@ class App:
             tid = f"T{self.n_triggers}"
             self.events.write("trigger", id=tid, t=round(now, 2), trigger=r.trigger, confidence=r.confidence,
                               reason=r.reason, outcome=outcome, llm_s=round(took, 2),
+                              raw=r.raw if outcome == "invalid" else None,
                               window_start=round(max(0.0, now - window), 2))
             log(f"    .. trigger {tid} at {now:.0f}s: {r.trigger} {r.confidence:.2f} -> {outcome} ({took:.1f}s): {r.reason}")
             if outcome == "raised":

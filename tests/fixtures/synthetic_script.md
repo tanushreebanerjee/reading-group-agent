@@ -18,11 +18,13 @@ events:
     turn: 12
     claim: "The deepest level, level three, works best as the synthesis boundary."
     truth: "Level 1 (boundary k=1) is best; deeper levels 2 and 3 degrade (Table 2, Section 4.3)."
+    match_terms: ["level 3|level three|deepest|k=3|k = 3|boundary"]
   - id: gap1
     kind: gap
     turn: 17
     question: "How many source views do they use in the main evaluation?"
     truth: "N = 2 source views, 200 samples per dataset (Section 5.1)."
+    match_terms: ["source view"]
   - id: ask2
     kind: ask
     turn: 22

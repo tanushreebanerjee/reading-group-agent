@@ -70,6 +70,10 @@ def run_app(args, meeting_dir: Path) -> subprocess.Popen:
     cmd = [sys.executable, "-m", "assistant", "--paper", args.paper, "--replay", str(FIX / "synthetic.wav"),
            "--speed", str(args.speed), "--mode", args.mode, "--meeting-dir", str(meeting_dir),
            "--hold", str(args.hold), "--port", str(args.port)]
+    if args.phase == 5:
+        # the fixture packs two planted events 48 s apart into 5 minutes; the 3-minute
+        # default cooldown (unit-tested separately) would make the second one unreachable
+        cmd += ["--set", f"trigger.cooldown_s={args.cooldown}"]
     print("$", " ".join(cmd), flush=True)
     log = open(meeting_dir / "app.log", "w")
     return subprocess.Popen(cmd, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, env={**os.environ})
@@ -115,7 +119,9 @@ def check_engaged(events, meta, turns, ws_msgs) -> list[tuple[bool, str]]:
     statuses = {e["id"]: e["status"] for e in events if e["kind"] == "hand_status"}
     for ev in [e for e in meta["events"] if e["kind"] in ("contradiction", "gap")]:
         t0 = by_turn[ev["turn"]]["start"]
-        hit = [h for h in hands if h["trigger"] == ev["kind"] and t0 <= h["t"] <= t0 + 90]
+        terms = [t.split("|") for t in ev.get("match_terms", [])]
+        hit = [h for h in hands if h["trigger"] == ev["kind"] and t0 <= h["t"] <= t0 + 90
+               and all(any(alt.lower() in h["reason"].lower() for alt in g) for g in terms)]
         trig = [e for e in events if e["kind"] == "trigger" and e["trigger"] == ev["kind"]
                 and t0 <= e["t"] <= t0 + 90]
         detail = (f"hand {hit[0]['id']} at {hit[0]['t']:.0f}s (planted at {t0:.0f}s, conf {hit[0]['confidence']:.2f})"
@@ -123,9 +129,13 @@ def check_engaged(events, meta, turns, ws_msgs) -> list[tuple[bool, str]]:
         res.append((bool(hit), f"{ev['id']} ({ev['kind']}): {detail}"))
         if hit:
             res.append((True, f"        reason: {hit[0]['reason']!r}\n        prepared: {hit[0]['text']!r}"))
-    fp = [h for h in hands if not any(
-        h["trigger"] == ev["kind"] and by_turn[ev["turn"]]["start"] <= h["t"] <= by_turn[ev["turn"]]["start"] + 90
-        for ev in meta["events"] if ev["kind"] in ("contradiction", "gap"))]
+    def matches(h, ev):
+        t0 = by_turn[ev["turn"]]["start"]
+        terms = [t.split("|") for t in ev.get("match_terms", [])]
+        return (h["trigger"] == ev["kind"] and t0 <= h["t"] <= t0 + 90
+                and all(any(alt.lower() in h["reason"].lower() for alt in g) for g in terms))
+
+    fp = [h for h in hands if not any(matches(h, ev) for ev in meta["events"] if ev["kind"] in ("contradiction", "gap"))]
     res.append((len(fp) <= 1, f"false-positive hands: {len(fp)} {[(h['id'], h['trigger'], h['reason'][:80]) for h in fp]}"))
     revealed = [m for m in ws_msgs if m["type"] == "hand_revealed"]
     raised_msgs = [m for m in ws_msgs if m["type"] == "hand_raised"]
@@ -146,9 +156,10 @@ def main():
     ap.add_argument("--hold", type=float, default=4)
     ap.add_argument("--max-latency", type=float, default=5.0)
     ap.add_argument("--meeting-dir", default=None)
+    ap.add_argument("--cooldown", type=float, default=30)
     args = ap.parse_args()
     args.mode = "ask" if args.phase == 3 else "engaged"
-    args.speed = args.speed or (4.0 if args.phase == 3 else 2.0)
+    args.speed = args.speed or (4.0 if args.phase == 3 else 1.0)
 
     meta, _ = parse_script(FIX / "synthetic_script.md")
     turns = json.loads((FIX / "synthetic_turns.json").read_text())

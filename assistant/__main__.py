@@ -26,6 +26,8 @@ def parse_args(argv=None):
     ap.add_argument("--hold", type=float, default=None,
                     help="replay: seconds to keep running after the recording ends (default 10)")
     ap.add_argument("--port", type=int, default=None)
+    ap.add_argument("--set", action="append", default=[], metavar="KEY=VALUE",
+                    help="override any config value, e.g. --set trigger.cooldown_s=60")
     return ap.parse_args(argv)
 
 
@@ -34,6 +36,15 @@ def main(argv=None):
     overrides = {"mode": args.mode}
     if args.port:
         overrides["display"] = {"port": args.port}
+    import yaml
+
+    for item in args.set:
+        key, _, val = item.partition("=")
+        node = overrides
+        *parents, leaf = key.split(".")
+        for k in parents:
+            node = node.setdefault(k, {})
+        node[leaf] = yaml.safe_load(val)
     cfg = load_config(args.config, overrides)
 
     from assistant.app import App, log

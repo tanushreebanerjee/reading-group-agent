@@ -66,7 +66,7 @@ class TranscriptStore:
             self._fh.flush()
 
     def window(self, now: float, seconds: float) -> list[Segment]:
-        return [s for s in self.segments if s.end >= now - seconds]
+        return sorted((s for s in self.segments if s.end >= now - seconds), key=lambda s: s.start)
 
     def between(self, t0: float, t1: float) -> list[Segment]:
         return [s for s in self.segments if s.end >= t0 and s.start <= t1]

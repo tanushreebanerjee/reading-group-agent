@@ -76,7 +76,35 @@ python -m assistant --paper papers/paper.pdf --replay tests/fixtures/synthetic.w
 python -m log.tune meetings/
 ```
 
+Any config value can be overridden for one run with `--set`, e.g.
+`--set trigger.cooldown_s=120 --set trigger.thresholds.gap=0.8`.
+
 Add `--record` to save live audio as WAV. Without it, no audio is stored.
+
+### Engaged mode: raised hands
+
+Every 15 s a trigger check reads the last 2 minutes of transcript plus the
+brief. It decides whether someone stated something that contradicts the paper
+(`contradiction`), or the group stalled on a factual question the paper
+answers (`gap`). If the confidence clears the per-type threshold, and the
+point is not a repeat or inside the 3-minute cooldown, the screen shows
+**✋ CONTRADICTION** or **✋ GAP**, never the content. Press **R** (or the
+Reveal button) to show what the assistant wants to say, or **D** to dismiss
+it. Hands nobody acts on are logged as ignored.
+
+### After the meeting: label and tune
+
+`meetings/<date>/log.md` lists the summary, every answer, every raised hand,
+and every trigger that fired but stayed hidden (below threshold, cooldown, or
+duplicate). Each entry has its transcript context. Group members fill in
+`helpful: yes` or `helpful: no`, then:
+
+```bash
+python -m log.tune meetings/        # precision per trigger type at each threshold
+```
+
+Raise a threshold in `config.yaml` if precision is low at the current value.
+Lower it if many below-threshold triggers were labelled helpful.
 Transcripts and logs stay under `meetings/`, which is gitignored.
 
 ## Tests

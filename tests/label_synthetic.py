@@ -28,12 +28,15 @@ MARK_RE = re.compile(r"<!--\s*(.*?)\s*-->")
 def labels_for(meeting_dir: Path) -> dict[str, str]:
     meta, _ = parse_script(FIX / "synthetic_script.md")
     turns = {t["turn"]: t for t in json.loads((FIX / "synthetic_turns.json").read_text())}
-    planted = [(e["kind"], turns[e["turn"]]["start"]) for e in meta["events"] if e["kind"] in ("contradiction", "gap")]
+    planted = [(e["kind"], turns[e["turn"]]["start"], [t.split("|") for t in e.get("match_terms", [])])
+               for e in meta["events"] if e["kind"] in ("contradiction", "gap")]
     asks = [(turns[e["turn"]], e["expect_terms"]) for e in meta["events"] if e["kind"] == "ask"]
     out = {}
     for ev in read_events(meeting_dir / "events.jsonl"):
         if ev["kind"] in ("hand", "trigger"):
-            good = any(ev["trigger"] == k and t0 <= ev["t"] <= t0 + 90 for k, t0 in planted)
+            good = any(ev["trigger"] == k and t0 <= ev["t"] <= t0 + 90 and
+                       all(any(a.lower() in ev["reason"].lower() for a in g) for g in terms)
+                       for k, t0, terms in planted)
             out[ev["id"]] = "yes" if good else "no"
         elif ev["kind"] == "answer":
             good = any(t["start"] - 3 <= ev["q_start"] <= t["end"] + 3 and
