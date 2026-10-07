@@ -58,7 +58,8 @@ def main(argv=None):
     source = make_source(cfg, replay=args.replay, speed=args.speed, record=args.record,
                          record_dir=meeting_dir, prompt=stt_prompt(cfg, paper.title, key_terms(paper)))
     hold = args.hold if args.hold is not None else (10.0 if args.replay else 0.0)
-    app = App(cfg, source, paper, brief, meeting_dir, hold_s=hold)
+    app = App(cfg, source, paper, brief, meeting_dir, hold_s=hold,
+              brief_path=str(brief_path.resolve()) if brief else None)
     try:
         asyncio.run(app.run())
     except KeyboardInterrupt:

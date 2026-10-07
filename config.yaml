@@ -8,6 +8,10 @@ name_aliases: [sherlock, sherlok, shirlock, sherlocke, sher lock, share lock, su
 name_search_words: 8
 name_match_ratio: 80
 
+# Names of group members, used to prime speech recognition. Put real names in the
+# gitignored config.local.yaml, not here.
+group_members: []
+
 audio_device: "BlackHole 2ch"
 mode: ask            # ask | engaged
 

@@ -10,7 +10,7 @@ Re-read this when resuming work. Plan: Phases 0–5 from `CLAUDE.md`.
 | 1 Prep brief | done | `python -m prep papers/test.pdf` -> `briefs/test/brief.md` (935 words); all 8 key-number rows verified on cited page by `prep.verify`, Tables 2/3 hand-checked |
 | 2 Transcript | done | `python -m audio --replay tests/fixtures/synthetic.wav --speed 4 --paper papers/test.pdf` streams a readable transcript; `tests/transcript_wer.py`: WER 7.5%, name heard 2/2 |
 | 3 Ask + display | done, latency target missed locally | `tests/e2e_check.py --phase 3`: both questions answered correctly with citations, streamed to the display, no spurious answers. First words 8–13 s after the question locally; the ~5 s target needs a GPU backend (see Known issues) |
-| 4 Meeting log | todo | |
+| 4 Meeting log | done | after each run `meetings/<dir>/log.md` has the summary, every answer, every hand (revealed/dismissed/ignored), and every suppressed trigger, each with ±45 s transcript context, a machine marker, and a blank `helpful:` line; `tests/test_log.py` round-trips labels through `log.tune` |
 | 5 Engaged mode | todo | |
 
 ## Environment (dev machine)
@@ -100,6 +100,17 @@ Re-read this when resuming work. Plan: Phases 0–5 from `CLAUDE.md`.
   is sent on reveal. Keys: R reveal, D dismiss.
 - Model output is cleaned of LaTeX/markdown before display.
 
+- **Meeting log:** `events.jsonl` is append-only during the meeting.
+  `log.md` is built at shutdown (`python -m log.build <dir>` rebuilds it into
+  `log.rebuilt.md` without overwriting labels). Raised triggers appear once,
+  as hands. Below-threshold, cooldown, and duplicate triggers are listed
+  separately so they can be labelled too.
+- **Summary:** 5 bullets max, from the summary LLM with the brief as context,
+  so claims from the meeting are reported as discussion, not paper facts.
+  Long meetings are summarized in chunks, then merged.
+- **Local overrides:** `config.local.yaml` (gitignored) is merged over
+  `config.yaml`. It holds `group_members` (lab names), which prime Whisper.
+
 ## How to run
 
 See README. Phase 0: `python -m audio --list-devices`, `pytest -q`,
@@ -122,6 +133,10 @@ See README. Phase 0: `python -m audio --list-devices`, `pytest -q`,
   Needs the user's Nexus account, partition, and QOS.
 - Memory: with qwen2.5:7b + 3b both loaded, free memory dropped to 18% and
   prefill slowed about 2×. Keep only one model resident on the 16 GB Air.
+
+- The 7B summary sometimes mixes brief content into "what was discussed" and
+  can misstate facts (on the fixture it said the paper doesn't give the number
+  of source views; §5.1 says 2). A stronger model (GPU backend) should help.
 
 ## Needs a human to test live
 

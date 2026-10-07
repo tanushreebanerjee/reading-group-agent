@@ -25,6 +25,8 @@ def stt_prompt(cfg: dict, paper_title: str | None = None, terms: list[str] | Non
     prompt = f"Reading group discussion with {name}."
     if paper_title:
         prompt += f" Paper: {paper_title}."
+    if cfg.get("group_members"):
+        prompt += " Attendees: " + ", ".join(cfg["group_members"]) + "."
     if terms:
         prompt += " Terms: " + ", ".join(terms) + "."
     return prompt

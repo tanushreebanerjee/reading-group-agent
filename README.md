@@ -93,7 +93,9 @@ and one unanswered factual question.
 
 ## Configuration
 
-Every tunable is in `config.yaml`. Prompts live in `prompts/*.md`. LLM
+Every tunable is in `config.yaml`. Machine- or group-specific overrides go in
+`config.local.yaml` (gitignored). For example, `group_members: [...]` primes
+speech recognition with attendees' names. Prompts live in `prompts/*.md`. LLM
 backends are set separately for `prep`, `answer`, `trigger`, and `summary`:
 
 | backend | notes |

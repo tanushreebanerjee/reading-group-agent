@@ -1,5 +1,6 @@
-# secrets
+# secrets and local overrides
 .env
+config.local.yaml
 
 # meeting data: never commit
 meetings/

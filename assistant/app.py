@@ -24,7 +24,8 @@ def log(msg: str) -> None:
 
 class App:
     def __init__(self, cfg: dict, source, paper: Paper | None, brief: str, meeting_dir: Path,
-                 hold_s: float = 0.0):
+                 hold_s: float = 0.0, brief_path: str | None = None):
+        self.brief_path = brief_path
         self.cfg = cfg
         self.mode = cfg.get("mode", "ask")
         self.source = source
@@ -224,7 +225,7 @@ class App:
         server = await serve(self.hub, d["host"], int(d["port"]))
         log(f"[assistant] display at http://{d['host']}:{d['port']}  mode={self.mode}  meeting={self.meeting_dir}")
         self.events.write("meeting_start", mode=self.mode, source=str(getattr(self.source, "path", "live")),
-                          paper=self.paper.title if self.paper else None,
+                          paper=self.paper.title if self.paper else None, brief=self.brief_path,
                           answer_llm=repr(self.answer_llm), trigger_llm=repr(self.trigger_llm),
                           stt_model=self.cfg["stt"].get("model"), speed=self.source.clock.speed)
         await self.send_status()

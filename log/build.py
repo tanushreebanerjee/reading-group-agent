@@ -44,15 +44,15 @@ def collect(events: list[dict]) -> dict:
     return out
 
 
-def summarize(cfg: dict, segs: list[Segment], paper: str | None) -> str:
+def summarize(cfg: dict, segs: list[Segment], paper: str | None, brief: str = "") -> str:
     from core.llm import make_llm
-    from core.prompts import load_prompt
+    from core.prompts import load_prompt, system_prompt
     from core.transcript import format_segments
 
     if not segs:
         return "_No transcript._"
     llm = make_llm(cfg["llm"].get("summary") or cfg["llm"]["answer"])
-    system = load_prompt(cfg, "summary")
+    system = system_prompt(cfg, brief, "summary")
     text = format_segments(segs)
     # map-reduce for long meetings so the local model's context isn't exceeded
     limit = 12000
@@ -61,7 +61,9 @@ def summarize(cfg: dict, segs: list[Segment], paper: str | None) -> str:
         partial = [llm.complete(system, load_prompt(cfg, "summary_user", paper=paper or "unknown", transcript=p))
                    for p in parts]
         text = "\n".join(partial)
-    return llm.complete(system, load_prompt(cfg, "summary_user", paper=paper or "unknown", transcript=text)).strip()
+    out = llm.complete(system, load_prompt(cfg, "summary_user", paper=paper or "unknown", transcript=text)).strip()
+    bullets = [ln for ln in out.splitlines() if ln.strip().startswith(("-", "*"))]
+    return "\n".join(bullets[:5]) if bullets else out
 
 
 def render(cfg: dict, meeting_dir: Path, info: dict, segs: list[Segment], summary: str) -> str:
@@ -122,7 +124,10 @@ def build_log(cfg: dict, meeting_dir: str | Path, with_summary: bool = True, out
     summary = ""
     if with_summary:
         try:
-            summary = summarize(cfg, segs, (info["start"] or {}).get("paper"))
+            start = info["start"] or {}
+            bp = Path(start["brief"]) if start.get("brief") else None
+            brief = bp.read_text() if bp and bp.exists() else ""
+            summary = summarize(cfg, segs, start.get("paper"), brief)
         except Exception as e:
             print(f"[log] summary failed: {e}", file=sys.stderr)
     out = meeting_dir / out_name

@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG = ROOT / "config.yaml"
+LOCAL_CONFIG = ROOT / "config.local.yaml"  # gitignored per-machine/group overrides (e.g. member names)
 
 
 def deep_merge(base: dict, override: dict) -> dict:
@@ -28,6 +29,9 @@ def load_config(path: str | Path | None = None, overrides: dict | None = None) -
     path = Path(path) if path else DEFAULT_CONFIG
     with open(path) as f:
         cfg = yaml.safe_load(f) or {}
+    if path == DEFAULT_CONFIG and LOCAL_CONFIG.exists():
+        with open(LOCAL_CONFIG) as f:
+            cfg = deep_merge(cfg, yaml.safe_load(f) or {})
     if overrides:
         cfg = deep_merge(cfg, {k: v for k, v in overrides.items() if v is not None})
     # resolve relative paths against the repo root
