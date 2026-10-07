@@ -7,7 +7,7 @@ Re-read this when resuming work. Plan: Phases 0–5 from `CLAUDE.md`.
 | Phase | Status | Acceptance |
 |---|---|---|
 | 0 Skeleton | done | `python -m audio --list-devices` shows BlackHole 2ch; `pytest` green; `synthetic.wav` 5.0 min |
-| 1 Prep brief | todo | |
+| 1 Prep brief | done | `python -m prep papers/test.pdf` -> `briefs/test/brief.md` (935 words); all 8 key-number rows verified on cited page by `prep.verify`, Tables 2/3 hand-checked |
 | 2 Transcript | todo | |
 | 3 Ask + display | todo | |
 | 4 Meeting log | todo | |
@@ -41,6 +41,15 @@ Re-read this when resuming work. Plan: Phases 0–5 from `CLAUDE.md`.
   after questions to Atlas and 3.0 s after the planted stall. Turn timings
   are in `tests/fixtures/synthetic_turns.json`. `synthetic.wav` is committed
   (gitignore exception).
+
+- **Prep pipeline:** related work comes from Semantic Scholar (no key; backs
+  off on 429), with a fallback that parses the bibliography, ranks entries by
+  in-text citation count, and looks them up on arXiv. Four `claude -p` calls
+  (advocate → skeptic → checker → editor) take about 90 s total, plus up to
+  two "condense" passes when the editor overshoots `prep.max_words` (900).
+  Each role's output is cached in `briefs/<stem>/`. `--fresh` reruns.
+  `prep.verify` checks every Key-numbers row against the PDF text of the cited
+  page and appends a warning to the brief if any row fails.
 
 ## How to run
 
