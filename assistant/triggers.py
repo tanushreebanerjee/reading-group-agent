@@ -106,7 +106,11 @@ class Gate:
         key = f"{r.quote} {r.reason}"
         if self.is_duplicate(key):
             return "duplicate"
-        if self.last_raised_t is not None and now - self.last_raised_t < self.cooldown_s:
+        # Corrections and unanswered questions outrank points: a point never delays them, so
+        # their cooldown counts only their own hands; a point waits for every kind of hand.
+        major = [t for k, t in self.last_by_type.items() if k != "point"]
+        since = max(major, default=None) if r.trigger != "point" else self.last_raised_t
+        if since is not None and now - since < self.cooldown_s:
             return "cooldown"
         own = self.type_cooldown_s.get(r.trigger)
         last = self.last_by_type.get(r.trigger)

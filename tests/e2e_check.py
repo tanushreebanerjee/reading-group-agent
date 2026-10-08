@@ -73,7 +73,7 @@ def run_app(args, meeting_dir: Path) -> subprocess.Popen:
     if args.phase == 5:
         # the fixture packs two planted events 48 s apart into 5 minutes; the 3-minute
         # default cooldown (unit-tested separately) would make the second one unreachable
-        cmd += ["--set", f"trigger.cooldown_s={args.cooldown}"]
+        cmd += ["--set", f"trigger.cooldown_s={args.cooldown}", "--set", f"trigger.type_cooldown_s.point={args.cooldown}"]
     for kv in args.set:
         cmd += ["--set", kv]
     print("$", " ".join(cmd), flush=True)

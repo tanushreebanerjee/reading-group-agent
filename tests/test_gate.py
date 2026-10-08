@@ -119,3 +119,13 @@ def test_spoken_intro_names_what_the_hand_answers():
     gap = Hand("H3", 1, "T3", "gap", 0.9, "r", "x", quote="How many source views do they use?")
     assert spoken_intro(gap) == "Earlier, someone asked: How many source views do they use?"
     assert spoken_intro(Hand("H4", 1, "T4", "gap", 0.9, "r", "x")) == ""
+
+
+def test_a_point_never_delays_a_correction():
+    g = discuss_gate()
+    assert g.check(point(), 10, LINES, LINES) == "raised"
+    wrong = TriggerResult("contradiction", 0.95, "Table 2: level 1 is best", quote=LINES[1])
+    assert g.check(wrong, 15, LINES, LINES) == "raised"            # 5 s after a point: still raised
+    third = "I wonder what dominates the runtime, the diffusion or the decoder."
+    later_point = point(quote=third, reason="App. D.2: the level-0 cascade adds 28.4 s")
+    assert g.check(later_point, 20, LINES + [third], LINES + [third]) == "cooldown"   # a point waits for the correction
