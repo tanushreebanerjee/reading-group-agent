@@ -123,7 +123,7 @@ def check_engaged(events, meta, turns, ws_msgs) -> list[tuple[bool, str]]:
         t0 = by_turn[ev["turn"]]["start"]
         terms = [t.split("|") for t in ev.get("match_terms", [])]
         hit = [h for h in hands if h["trigger"] == ev["kind"] and t0 <= h["t"] <= t0 + 90
-               and all(any(alt.lower() in (h.get("quote", "") + " " + h["reason"]).lower() for alt in g) for g in terms)]
+               and all(any(alt.lower() in " ".join((h.get("quote", ""), h["reason"], h.get("text") or "")).lower() for alt in g) for g in terms)]
         trig = [e for e in events if e["kind"] == "trigger" and e["trigger"] == ev["kind"]
                 and t0 <= e["t"] <= t0 + 90]
         detail = (f"hand {hit[0]['id']} at {hit[0]['t']:.0f}s (planted at {t0:.0f}s, conf {hit[0]['confidence']:.2f})"
@@ -136,7 +136,7 @@ def check_engaged(events, meta, turns, ws_msgs) -> list[tuple[bool, str]]:
         t0 = by_turn[ev["turn"]]["start"]
         terms = [t.split("|") for t in ev.get("match_terms", [])]
         return (h["trigger"] == ev["kind"] and t0 <= h["t"] <= t0 + 90
-                and all(any(alt.lower() in (h.get("quote", "") + " " + h["reason"]).lower() for alt in g) for g in terms))
+                and all(any(alt.lower() in " ".join((h.get("quote", ""), h["reason"], h.get("text") or "")).lower() for alt in g) for g in terms))
 
     fp = [h for h in hands if not any(matches(h, ev) for ev in meta["events"] if ev["kind"] in ("contradiction", "gap"))]
     res.append((len(fp) <= 1, f"false-positive hands: {len(fp)} {[(h['id'], h['trigger'], h['reason'][:80]) for h in fp]}"))

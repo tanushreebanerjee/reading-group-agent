@@ -159,13 +159,17 @@ get the group's OK first, since the recent transcript goes to Groq:
 llm:
   answer:
     backend: groq
-    model: llama-3.3-70b-versatile
+    model: qwen/qwen3.8-27b
+    # hidden thinking (~+1 s); max_tokens must cover the thinking too
+    extra: {reasoning_effort: high, reasoning_format: hidden}
+    max_tokens: 1500
     timeout_s: 20
     fallback: {backend: ollama, model: qwen2.5:7b, num_ctx: 8192, keep_alive: 30m}
 ```
 
 Keep `trigger` local: it runs ~4 times a minute and would hit Groq's free
-daily token cap within about an hour. Each answer's `served_by` field in
+free limits (about 8k tokens/minute and 1,000 requests/day for this model).
+Groq's model list changes; `curl -s -H "Authorization: Bearer $GROQ_API_KEY" https://api.groq.com/openai/v1/models` shows what your key can use. Each answer's `served_by` field in
 `events.jsonl` records which backend actually answered.
 
 To use a large cloud model for answers, also set `answer.context: full_paper`.

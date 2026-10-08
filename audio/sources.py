@@ -148,6 +148,9 @@ class LiveSource:
                                float(s.get("energy_threshold", 0.008)))
         self.record_path = record_path
         self.prompt = prompt or stt_prompt(cfg)
+        self.energy_threshold = float(s.get("energy_threshold", 0.008))
+        self.started_at: float | None = None   # time.monotonic() when capture began
+        self.last_sound: float | None = None   # time.monotonic() of the last non-silent block
         self._inflight: list[float] = []   # start times of chunks being transcribed
         self.done = False
 
@@ -173,6 +176,8 @@ class LiveSource:
             if status:
                 print(f"[audio] {status}", file=sys.stderr)
             mono = indata.mean(axis=1).astype(np.float32)
+            if float(np.sqrt(np.mean(mono ** 2))) >= self.energy_threshold:
+                self.last_sound = time.monotonic()
             loop.call_soon_threadsafe(q.put_nowait, mono)
 
         out_q: asyncio.Queue = asyncio.Queue()
@@ -203,6 +208,7 @@ class LiveSource:
         print(f"[audio] listening on {self.dev['name']} ({self.sr_in} Hz)"
               + (f", recording to {self.record_path}" if rec else ""), file=sys.stderr)
         pump_task = asyncio.create_task(pump())
+        self.started_at = time.monotonic()
         try:
             with stream:
                 while True:

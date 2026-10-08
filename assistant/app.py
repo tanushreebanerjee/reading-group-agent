@@ -63,6 +63,7 @@ class App:
         self.n_triggers = 0
         self.last_latency: float | None = None
         self.listening = False
+        self.audio_ok = True               # False while a live input has been silent too long
         self.tasks: set[asyncio.Task] = set()
 
     # ---------- helpers ----------
@@ -88,7 +89,9 @@ class App:
     async def send_status(self) -> None:
         await self.hub.send({"type": "status", "mode": self.mode, "listening": self.listening,
                              "latency_s": self.last_latency, "name": self.cfg.get("assistant_name"),
-                             "source": "replay" if getattr(self.source, "path", None) else "live"})
+                             "source": "replay" if getattr(self.source, "path", None) else "live",
+                             "heard": len(self.store.segments), "audio_ok": self.audio_ok,
+                             "device": self.cfg.get("audio_device")})
 
     async def send_hand_state(self) -> None:
         head = self.hands.head()
@@ -113,6 +116,8 @@ class App:
     def on_segment(self, seg: Segment) -> None:
         self.store.add(seg)
         log(f"[{seg.start:7.1f}] {seg.text}")
+        if len(self.store.segments) % 5 == 1:   # keep the display's "heard" count roughly current
+            self.spawn(self.send_status())
         if self.collector.collecting:
             self.collector.add(seg)
             return
@@ -168,6 +173,28 @@ class App:
         log(f"    -> {aid} (first words {first_words or -1:.1f}s / complete {e2e:.1f}s after question end, llm {res.latency_s:.1f}s"
             f"{'' if res.cited else ', NO CITATION'}): {res.text}")
 
+    async def audio_watch(self) -> None:
+        """Live input only: warn (terminal + display) when the device has been silent for a while,
+        which almost always means Zoom's speaker is not routed into it."""
+        after = float(self.cfg["stt"].get("silence_warn_s", 20))
+        while True:
+            await asyncio.sleep(2)
+            src = self.source
+            if src.started_at is None:
+                continue
+            quiet = time.monotonic() - (src.last_sound or src.started_at)
+            ok = quiet < after
+            if ok != self.audio_ok:
+                self.audio_ok = ok
+                if ok:
+                    log(f"[audio] sound is coming in from {self.cfg.get('audio_device')} again")
+                else:
+                    log(f"[audio] WARNING: no sound from {self.cfg.get('audio_device')} for {quiet:.0f}s. "
+                        f"Is Zoom's speaker (Settings > Audio > Speaker) set to it, and is the call live? "
+                        f"Quick test: say -a \"{self.cfg.get('audio_device')}\" \"{self.cfg.get('assistant_name')}, "
+                        f"what is this paper about?\"")
+                await self.send_status()
+
     # ---------- engaged mode ----------
 
     async def trigger_loop(self) -> None:
@@ -180,7 +207,9 @@ class App:
             next_t = self.now + interval
             if len(self.store.segments) == last_seen:
                 continue  # nothing new was said
-            if self.shared_llm and (self.answering or self.collector.collecting or self.answer_lock.locked()):
+            # While a question to the assistant is open or being answered, skip: it is not a
+            # stalled gap, and on a shared local model the check would also delay the answer.
+            if self.answering or self.collector.collecting or (self.shared_llm and self.answer_lock.locked()):
                 self.events.write("trigger_skip", t=round(self.now, 2), why="busy")
                 next_t = self.now + 2.0  # retry shortly instead of losing a whole interval
                 continue
@@ -253,6 +282,8 @@ class App:
         except Exception as e:
             log(f"[assistant] WARNING: answer model warmup failed: {e}")
         loops = [asyncio.create_task(self.question_loop())]
+        if hasattr(self.source, "last_sound"):
+            loops.append(asyncio.create_task(self.audio_watch()))
         if self.mode == "engaged":
             loops.append(asyncio.create_task(self.trigger_loop()))
         try:

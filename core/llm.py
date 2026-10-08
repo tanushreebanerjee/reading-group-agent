@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
+import time
 from typing import Iterator
 
 import requests
@@ -179,6 +181,21 @@ class AnthropicLLM(LLM):
         return "".join(b.get("text", "") for b in r.json()["content"] if b.get("type") == "text")
 
 
+def retry_wait_s(r) -> float | None:
+    """Seconds a 429 response asks us to wait: Retry-After header, else 'try again in 4.3s' in the body."""
+    h = (getattr(r, "headers", None) or {}).get("retry-after")
+    try:
+        if h is not None:
+            return float(h)
+    except ValueError:
+        pass
+    m = re.search(r"try again in (?:(\d+)m)?([\d.]+)(ms|s)", getattr(r, "text", "") or "")
+    if not m:
+        return None
+    secs = float(m.group(2)) / (1000 if m.group(3) == "ms" else 1)
+    return 60 * int(m.group(1) or 0) + secs
+
+
 class OpenAILLM(LLM):
     """OpenAI-compatible chat completions: OpenAI itself, or any server with the same API
     (Groq, Cerebras, OpenRouter, a vLLM box) via `base_url` and `api_key_env`.
@@ -203,6 +220,11 @@ class OpenAILLM(LLM):
         self.base_url = (cfg.get("base_url") or base_url).rstrip("/")
         self.key_env = cfg.get("api_key_env") or key_env
         self.timeout = float(cfg.get("timeout_s", 60))
+        # provider-specific request fields, e.g. {reasoning_effort: low} for reasoning models
+        self.extra = dict(cfg.get("extra") or {})
+        # a 429 asking us to wait at most this long is retried in place (once) rather than
+        # raised: free tiers often ask for a few seconds, far less than a fallback costs
+        self.max_retry_wait_s = float(cfg.get("max_retry_wait_s", 6))
 
     def _request(self, system, user, json_mode, max_tokens, temperature, stream):
         key = _require_env(self.key_env)
@@ -213,14 +235,20 @@ class OpenAILLM(LLM):
             "temperature": temp,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
             "stream": stream,
+            **self.extra,
         }
         if json_mode:
             body["response_format"] = {"type": "json_object"}
-        try:
-            r = requests.post(f"{self.base_url}/chat/completions", headers={"Authorization": f"Bearer {key}"},
-                              json=body, timeout=self.timeout, stream=stream)
-        except requests.RequestException as e:
-            raise LLMError(f"{self.name} ({self.model}): {e}") from e
+        for attempt in (0, 1):
+            try:
+                r = requests.post(f"{self.base_url}/chat/completions", headers={"Authorization": f"Bearer {key}"},
+                                  json=body, timeout=self.timeout, stream=stream)
+            except requests.RequestException as e:
+                raise LLMError(f"{self.name} ({self.model}): {e}") from e
+            wait = retry_wait_s(r) if r.status_code == 429 and attempt == 0 else None
+            if wait is None or wait > self.max_retry_wait_s:
+                break
+            time.sleep(wait + 0.2)
         if r.status_code != 200:
             raise LLMError(f"{self.name} {r.status_code}: {r.text[:300]}")
         return r
@@ -231,6 +259,7 @@ class OpenAILLM(LLM):
 
     def stream(self, system, user, *, json_mode=False, max_tokens=None, temperature=None):
         r = self._request(system, user, json_mode, max_tokens, temperature, stream=True)
+        r.encoding = "utf-8"  # SSE responses often omit the charset; requests would guess Latin-1
         try:
             for line in r.iter_lines(decode_unicode=True):
                 if not line or not line.startswith("data:"):

@@ -13,3 +13,11 @@ def cfg():
     from core.config import load_config
 
     return load_config()
+
+
+@pytest.fixture(autouse=True)
+def no_local_config(monkeypatch, tmp_path):
+    """Tests see the committed config.yaml only, not this machine's config.local.yaml."""
+    import core.config
+
+    monkeypatch.setattr(core.config, "LOCAL_CONFIG", tmp_path / "absent.yaml")

@@ -35,6 +35,8 @@
   footer { display: flex; gap: 2.5vw; color: var(--muted); font-size: 1.2vw; }
   .dot { display: inline-block; width: .8vw; height: .8vw; border-radius: 50%; background: #555; margin-right: .5vw; }
   .dot.on { background: #3fb950; }
+  .dot.warn { background: #f85149; }
+  .warn-text { color: #f85149; }
   kbd { border: 1px solid #444; border-radius: 4px; padding: 0 .4vw; }
   @media (max-width: 700px) {
     body { padding: 16px; }
@@ -82,8 +84,12 @@ function setAnswer(text, cls) {
 function handle(m) {
   switch (m.type) {
     case "status":
-      $("dot").className = "dot" + (m.listening ? " on" : "");
-      $("listening").textContent = m.listening ? `listening (${m.source})` : "not listening";
+      const silent = m.listening && m.audio_ok === false;
+      $("dot").className = "dot" + (silent ? " warn" : m.listening ? " on" : "");
+      $("listening").className = silent ? "warn-text" : "";
+      $("listening").textContent = !m.listening ? "not listening"
+        : silent ? `no audio from ${m.device || "input"}: check Zoom speaker`
+        : `listening (${m.source})` + (m.heard ? ` · ${m.heard} lines heard` : "");
       $("mode").textContent = "mode: " + m.mode;
       if (m.name) $("name").firstChild.textContent = m.name + " ";
       if (m.latency_s != null) $("latency").textContent = `last answer: ${m.latency_s.toFixed(1)} s`;

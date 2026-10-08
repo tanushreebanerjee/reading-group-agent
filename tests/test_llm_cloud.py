@@ -71,9 +71,11 @@ def test_groq_preset():
 class FakeResp:
     def __init__(self, status=200, lines=(), body=None):
         self.status_code, self._lines, self._body, self.text = status, lines, body, "err"
+        self.encoding = "ISO-8859-1"
 
     def iter_lines(self, decode_unicode=True):
-        yield from self._lines
+        for line in self._lines:  # mimic requests: decode raw UTF-8 bytes with self.encoding
+            yield line.encode("utf-8").decode(self.encoding)
 
     def json(self):
         return self._body
@@ -85,7 +87,7 @@ def test_openai_stream_parses_sse(monkeypatch):
     lines = ["", ": keep-alive",
              "data: " + json.dumps({"choices": [{"delta": {"role": "assistant"}}]}),
              "data: " + json.dumps({"choices": [{"delta": {"content": "Table "}}]}),
-             "data: " + json.dumps({"choices": [{"delta": {"content": "3."}}]}),
+             "data: " + json.dumps({"choices": [{"delta": {"content": "3 doesn’t."}}]}, ensure_ascii=False),
              "data: [DONE]"]
 
     def post(url, headers, json, timeout, stream):
@@ -94,7 +96,7 @@ def test_openai_stream_parses_sse(monkeypatch):
 
     monkeypatch.setattr(llm_mod.requests, "post", post)
     g = make_llm({"backend": "groq", "model": "m"})
-    assert "".join(g.stream("sys", "user", json_mode=True)) == "Table 3."
+    assert "".join(g.stream("sys", "user", json_mode=True)) == "Table 3 doesn’t."
     assert sent["url"].endswith("/chat/completions") and sent["auth"] == "Bearer k"
     assert sent["body"]["stream"] and sent["body"]["response_format"] == {"type": "json_object"}
 
@@ -112,3 +114,44 @@ def test_same_resource():
     assert same_resource(ol, {"backend": "ollama", "model": "other"})
     assert not same_resource({"backend": "groq", "model": "m", "fallback": ol}, ol)
     assert not same_resource(ol, {"backend": "ollama", "host": "http://gpu:11434"})
+
+
+def test_retry_wait_parsing():
+    from core.llm import retry_wait_s
+
+    class R:
+        def __init__(self, headers=None, text=""):
+            self.headers, self.text = headers or {}, text
+
+    assert retry_wait_s(R({"retry-after": "3"})) == 3
+    assert abs(retry_wait_s(R(text="Please try again in 4.268571428s. Need more")) - 4.2686) < 1e-3
+    assert retry_wait_s(R(text="try again in 1m2.5s")) == 62.5
+    assert retry_wait_s(R(text="try again in 250ms")) == 0.25
+    assert retry_wait_s(R(text="nope")) is None
+
+
+def test_short_429_is_retried_in_place(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "k")
+    monkeypatch.setattr(llm_mod.time, "sleep", lambda s: None)
+    calls = []
+
+    def post(*a, **kw):
+        calls.append(1)
+        if len(calls) == 1:
+            r = FakeResp(status=429); r.text = "try again in 2.1s"; r.headers = {}
+            return r
+        return FakeResp(body={"choices": [{"message": {"content": "ok"}}]})
+
+    monkeypatch.setattr(llm_mod.requests, "post", post)
+    assert make_llm({"backend": "groq", "model": "m"}).complete("s", "u") == "ok"
+    assert len(calls) == 2
+    # a long wait is not retried: it raises so the fallback can take over
+    calls.clear()
+    def post_long(*a, **kw):
+        calls.append(1)
+        r = FakeResp(status=429); r.text = "try again in 40s"; r.headers = {}
+        return r
+    monkeypatch.setattr(llm_mod.requests, "post", post_long)
+    with pytest.raises(LLMError):
+        make_llm({"backend": "groq", "model": "m"}).complete("s", "u")
+    assert len(calls) == 1
