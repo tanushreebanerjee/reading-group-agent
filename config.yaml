@@ -158,6 +158,8 @@ voice:
   groq_voice: troy
   gain: 1.0
   echo_tail_s: 0.5          # keep listening paused this long after speech ends
+  say_reference: false      # also speak "Earlier, someone said: ..." before a revealed hand
+                            # (the display always shows the original words and time)
 
 question_pause_s: 1.5
 question_max_s: 30          # stop collecting a question after this long regardless

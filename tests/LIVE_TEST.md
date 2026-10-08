@@ -42,8 +42,8 @@ Each answer appears on the display and is spoken; the terminal shows the latency
 | "They pick level 1 as the boundary." (correct) | No hand. |
 | "I think the figures are really nice." (opinion) | No hand. |
 
-Press **R** (display) or **Reveal** (/control): the screen shows *Re: "..." (time)* and the voice starts
-"Earlier, someone said: ...". Press **D** on another to dismiss it.
+Press **R** (display) or **Reveal** (/control): the screen shows *Re: "..." (time)* above the
+correction, and the voice reads the correction. Press **D** on another to dismiss it.
 
 ## 3. Engaged mode: unanswered questions (gap)
 

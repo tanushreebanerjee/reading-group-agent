@@ -329,7 +329,9 @@ class App:
                              "text": h.text if h.text is not None else "…preparing",
                              "quote": h.quote, "quote_t": h.quote_t})
         if h.text is not None and self.voice_mode() == "answers+reveal":
-            self.speak(" ".join(x for x in (spoken_intro(h), h.text) if x))
+            # the display shows what the hand responds to; saying it aloud too is optional
+            intro = spoken_intro(h) if (self.cfg.get("voice") or {}).get("say_reference") else ""
+            self.speak(" ".join(x for x in (intro, h.text) if x))
 
     async def on_action(self, msg: dict) -> None:
         action = msg.get("action")

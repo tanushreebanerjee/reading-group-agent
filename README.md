@@ -96,7 +96,9 @@ laptop only (it should show `qwen3.8:27b (nexus)` for all three models).
 
 **During:** "Sherlock, ..." then pause: the answer is shown and spoken. A ✋ shows only
 its type (contradiction, gap, point); **Reveal** (R, or the button on /control) shows and
-speaks it, starting with what it responds to ("Earlier, someone said: ..."). **D**
+speaks it; the screen also shows the words it responds to and when they were said
+(*Re: "..." (2:05)*). If you reveal it before its text is ready, the screen shows
+"…preparing" for a few seconds. **D**
 dismisses, **S** stops speech. Points nobody reveals lower themselves after 2 minutes.
 
 **After:** Ctrl-C (writes `meetings/<date>/log.md`), then `scripts/nexus_down.sh` to free
