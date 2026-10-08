@@ -24,9 +24,11 @@ fi
 PORT=$(python3 -c 'import socket; s=socket.socket(); s.bind(("",0)); print(s.getsockname()[1])')
 export OLLAMA_HOST="0.0.0.0:$PORT"
 export OLLAMA_MODELS="$SCRATCH/models"
-# answers, hand checks (every few seconds) and hand text (with thinking) overlap; with too few
-# slots an answer waits behind them. The model uses ~18 of 48 GB, so 4 slots fit.
-export OLLAMA_NUM_PARALLEL="${RGA_NUM_PARALLEL:-4}"
+# Answers, hand checks (every few seconds) and hand text (with thinking) overlap; with too few
+# slots an answer waits behind them. Each slot holds its own 32k context, so the KV cache is
+# stored at 8 bits to fit 3 slots of a 32B model in 48 GB.
+export OLLAMA_NUM_PARALLEL="${RGA_NUM_PARALLEL:-3}"
+export OLLAMA_KV_CACHE_TYPE=q8_0
 export OLLAMA_KEEP_ALIVE=24h
 export OLLAMA_FLASH_ATTENTION=1
 

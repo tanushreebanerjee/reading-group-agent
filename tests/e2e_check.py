@@ -76,6 +76,8 @@ def run_app(args, meeting_dir: Path) -> subprocess.Popen:
         cmd += ["--set", f"trigger.cooldown_s={args.cooldown}", "--set", f"trigger.type_cooldown_s.point={args.cooldown}"]
     if args.profile:   # never speak during a test: a real Zoom may be using the voice device as its mic
         cmd += ["--profile", args.profile, "--set", "voice.mode=off"]
+    if args.model:     # same model for every role (to compare Nexus models)
+        cmd += [x for r in ("answer", "trigger", "interjection") for x in ("--set", f"llm.{r}.model={args.model}")]
     for kv in args.set:
         cmd += ["--set", kv]
     print("$", " ".join(cmd), flush=True)
@@ -168,6 +170,7 @@ def main():
     ap.add_argument("--cooldown", type=float, default=30)
     ap.add_argument("--discuss", action="store_true", help="phase 5 in discuss mode (also expects the planted point)")
     ap.add_argument("--profile", default=None, help="run the app with a profile, e.g. nexus (voice forced off)")
+    ap.add_argument("--model", default=None, help="override the model of every role (e.g. qwen3:32b on Nexus)")
     ap.add_argument("--set", action="append", default=[], metavar="KEY=VALUE",
                     help="config override passed to the app, e.g. llm.answer.backend=groq")
     args = ap.parse_args()

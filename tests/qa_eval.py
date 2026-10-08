@@ -68,7 +68,11 @@ def main():
     ap.add_argument("--models", nargs="+", default=list(MODELS), choices=list(MODELS))
     ap.add_argument("--questions", default=str(ROOT / "tests/fixtures/qa_out_of_brief.yaml"))
     ap.add_argument("--groq-gap", type=float, default=25, help="seconds between Groq calls (8k input tokens/min)")
+    ap.add_argument("--nexus-model", default=None, help="Ollama model on Nexus to test instead of qwen3.8:27b")
     args = ap.parse_args()
+    if args.nexus_model:
+        for k in ("nexus", "nexus-excerpts"):
+            MODELS[k]["model"] = args.nexus_model
     spec = yaml.safe_load(open(args.questions))
     cfg = load_config()
     a = cfg["answer"]
