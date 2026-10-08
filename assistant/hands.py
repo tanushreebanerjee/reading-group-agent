@@ -15,6 +15,22 @@ class Hand:
     text: str                 # the prepared interjection (not shown until revealed)
     status: str = "pending"   # pending | revealed | dismissed | ignored | expired
     status_t: float | None = None
+    quote: str = ""           # what the person said that the hand responds to
+    quote_t: float | None = None  # meeting time it was said
+
+
+LEAD = {"contradiction": "Earlier, someone said", "gap": "Earlier, someone asked", "point": "Adding to the point that"}
+
+
+def spoken_intro(h: Hand, max_words: int = 18) -> str:
+    """Remind the room what a revealed hand responds to: by the time someone presses Reveal
+    the conversation may have moved on. Long quotes are cut to their first words."""
+    words = h.quote.strip().strip('"').split()
+    if not words:
+        return ""
+    q = " ".join(words[:max_words]).rstrip(" .?!,")
+    end = "?" if h.trigger == "gap" and len(words) <= max_words else "."
+    return f"{LEAD.get(h.trigger, 'Earlier, someone said')}: {q}{end}"
 
 
 # Reveal/Dismiss act on the most important pending hand: a correction outranks an

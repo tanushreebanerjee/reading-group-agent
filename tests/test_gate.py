@@ -106,3 +106,16 @@ def test_trigger_prompt_fills_point_rule_only_in_discuss(cfg):
     discuss = TriggerChecker(cfg, llm, "BRIEF", mode="discuss").build("t", [])[0]
     assert "$point_rule" not in engaged and "$types" not in engaged and '"point"' not in engaged
     assert '"point": the group is discussing' in discuss and '"point" | "none"' in discuss
+
+
+def test_spoken_intro_names_what_the_hand_answers():
+    from assistant.hands import spoken_intro
+    h = Hand("H1", 140, "T1", "contradiction", 0.9, "r", "The paper picks level 1 (Table 2).",
+             quote="And they found that the deepest level, level 3, works best as the synthesis boundary.")
+    assert spoken_intro(h) == ("Earlier, someone said: And they found that the deepest level, level 3, "
+                               "works best as the synthesis boundary.")
+    long = Hand("H2", 1, "T2", "point", 0.9, "r", "x", quote=" ".join(["word"] * 30))
+    assert spoken_intro(long).startswith("Adding to the point that: word") and spoken_intro(long).endswith("word.") and len(spoken_intro(long).split()) == 5 + 18
+    gap = Hand("H3", 1, "T3", "gap", 0.9, "r", "x", quote="How many source views do they use?")
+    assert spoken_intro(gap) == "Earlier, someone asked: How many source views do they use?"
+    assert spoken_intro(Hand("H4", 1, "T4", "gap", 0.9, "r", "x")) == ""

@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 from assistant.answer import Answerer
-from assistant.hands import Hand, HandQueue
+from assistant.hands import Hand, HandQueue, spoken_intro
 from assistant.names import NameDetector
 from assistant.questions import Question, QuestionCollector
 from assistant import settings as S
@@ -279,6 +279,15 @@ class App:
             if outcome == "raised":
                 await self.raise_hand(tid, r, now, transcript)
 
+    def quote_time(self, quote: str) -> float | None:
+        """Meeting time of the transcript line that best matches a quote (for 'Re: ... (2:05)')."""
+        from rapidfuzz import fuzz
+
+        q = quote.lower().strip()
+        best = max(((fuzz.partial_ratio(q, s.text.lower()), s.start) for s in self.store.segments
+                    if s.speaker != self.cfg.get("assistant_name", "Sherlock")), default=(0, None))
+        return round(best[1], 2) if q and best[0] >= 80 else None
+
     async def expire_hands(self, now: float) -> None:
         """Lower hands nobody revealed in time (trigger.expire_s per type): the topic has moved on."""
         gone = self.hands.expire(now, self.cfg.get("trigger", {}).get("expire_s") or {})
@@ -295,7 +304,8 @@ class App:
             # retrieve with the person's words plus the checker's short reason (which names the topic)
             res = await self.interjector.run("interjection", f"{r.quote} {r.reason}", transcript, trigger=r.trigger,
                                           reason=f'"{r.quote}" ({r.reason})', max_sentences=2)
-        hand = Hand(hid, round(now, 2), tid, r.trigger, r.confidence, r.reason, res.text)
+        hand = Hand(hid, round(now, 2), tid, r.trigger, r.confidence, r.reason, res.text,
+                    quote=r.quote, quote_t=self.quote_time(r.quote))
         self.hands.add(hand)
         self.events.write("hand", id=hid, t=hand.t, trigger_id=tid, trigger=r.trigger, confidence=r.confidence,
                           reason=r.reason, quote=r.quote, text=res.text, cited=res.cited, status="pending")
@@ -321,9 +331,10 @@ class App:
         self.events.write("hand_status", id=h.id, status=status, t=round(self.now, 2))
         log(f"    ✋ {h.id} {status}")
         if status == "revealed":
-            await self.hub.send({"type": "hand_revealed", "id": h.id, "trigger": h.trigger, "text": h.text})
+            await self.hub.send({"type": "hand_revealed", "id": h.id, "trigger": h.trigger, "text": h.text,
+                                 "quote": h.quote, "quote_t": h.quote_t})
             if self.voice_mode() == "answers+reveal":
-                self.speak(h.text)
+                self.speak(" ".join(x for x in (spoken_intro(h), h.text) if x))
         await self.send_hand_state()
 
     # ---------- voice output ----------

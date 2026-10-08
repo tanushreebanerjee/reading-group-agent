@@ -124,11 +124,14 @@ function handle(m) {
       } else { h.className = ""; }
       break;
     }
-    case "hand_revealed":
+    case "hand_revealed": {
       $("label").textContent = `Raised hand · ${m.trigger}`;
-      $("question").textContent = "";
+      // say what the hand responds to: the conversation may have moved on since
+      const when = m.quote_t != null ? ` (${Math.floor(m.quote_t / 60)}:${String(Math.floor(m.quote_t % 60)).padStart(2, "0")})` : "";
+      $("question").textContent = m.quote ? `Re: “${m.quote}”${when}` : "";
       setAnswer(m.text, "interjection");
       break;
+    }
   }
 }
 
