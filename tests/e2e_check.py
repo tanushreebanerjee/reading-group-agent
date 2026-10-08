@@ -114,12 +114,13 @@ def check_ask(events, meta, turns, max_latency) -> list[tuple[bool, str]]:
     return res
 
 
-def check_engaged(events, meta, turns, ws_msgs) -> list[tuple[bool, str]]:
+def check_engaged(events, meta, turns, ws_msgs, discuss=False) -> list[tuple[bool, str]]:
     res = []
     by_turn = {t["turn"]: t for t in turns}
     hands = [e for e in events if e["kind"] == "hand"]
     statuses = {e["id"]: e["status"] for e in events if e["kind"] == "hand_status"}
-    for ev in [e for e in meta["events"] if e["kind"] in ("contradiction", "gap")]:
+    hand_kinds = ("contradiction", "gap", "point") if discuss else ("contradiction", "gap")
+    for ev in [e for e in meta["events"] if e["kind"] in hand_kinds]:
         t0 = by_turn[ev["turn"]]["start"]
         terms = [t.split("|") for t in ev.get("match_terms", [])]
         hit = [h for h in hands if h["trigger"] == ev["kind"] and t0 <= h["t"] <= t0 + 90
@@ -138,7 +139,7 @@ def check_engaged(events, meta, turns, ws_msgs) -> list[tuple[bool, str]]:
         return (h["trigger"] == ev["kind"] and t0 <= h["t"] <= t0 + 90
                 and all(any(alt.lower() in " ".join((h.get("quote", ""), h["reason"], h.get("text") or "")).lower() for alt in g) for g in terms))
 
-    fp = [h for h in hands if not any(matches(h, ev) for ev in meta["events"] if ev["kind"] in ("contradiction", "gap"))]
+    fp = [h for h in hands if not any(matches(h, ev) for ev in meta["events"] if ev["kind"] in hand_kinds)]
     res.append((len(fp) <= 1, f"false-positive hands: {len(fp)} {[(h['id'], h['trigger'], h['reason'][:80]) for h in fp]}"))
     revealed = [m for m in ws_msgs if m["type"] == "hand_revealed"]
     raised_msgs = [m for m in ws_msgs if m["type"] == "hand_raised"]
@@ -160,10 +161,11 @@ def main():
     ap.add_argument("--max-latency", type=float, default=5.0)
     ap.add_argument("--meeting-dir", default=None)
     ap.add_argument("--cooldown", type=float, default=30)
+    ap.add_argument("--discuss", action="store_true", help="phase 5 in discuss mode (also expects the planted point)")
     ap.add_argument("--set", action="append", default=[], metavar="KEY=VALUE",
                     help="config override passed to the app, e.g. llm.answer.backend=groq")
     args = ap.parse_args()
-    args.mode = "ask" if args.phase == 3 else "engaged"
+    args.mode = "ask" if args.phase == 3 else ("discuss" if args.discuss else "engaged")
     args.speed = args.speed or (4.0 if args.phase == 3 else 1.0)
 
     meta, _ = parse_script(FIX / "synthetic_script.md")
@@ -188,7 +190,7 @@ def main():
 
     results = check_ask(events, meta, turns, args.max_latency)
     if args.phase == 5:
-        results += check_engaged(events, meta, turns, seen)
+        results += check_engaged(events, meta, turns, seen, discuss=args.discuss)
     log_md = meeting_dir / "log.md"
     results.append((log_md.exists(), f"log.md written ({log_md})"))
     results.append((any(m["type"] == "answer_done" for m in seen), "display received answers over websocket"))

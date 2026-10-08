@@ -1,0 +1,40 @@
+# Questions about papers/GLD.pdf whose answers are in the paper but NOT in briefs/GLD/brief.md.
+# Used by tests/qa_eval.py to compare answer models (and full-paper vs retrieved-excerpt context).
+# expect_terms: every group must appear in the answer; "|" separates accepted alternatives.
+# Each answer was checked against the extracted paper text (2026-10-07).
+paper: papers/GLD.pdf
+brief: briefs/GLD/brief.md
+questions:
+  - q: "Which datasets is GLD trained on?"
+    truth: "Four: RealEstate10K, DL3DV, HyperSim and TartanAir (§5.1)."
+    expect_terms: ["HyperSim|Hypersim", "TartanAir|Tartan Air"]
+  - q: "How many views are in each training sample, and how many of them are source views?"
+    truth: "V = 8 views per sample, with 1 to 4 randomly chosen as source views (§5.1)."
+    expect_terms: ["8|eight", "1 to 4|1–4|1-4|one to four|between 1 and 4|up to 4|up to four"]
+  - q: "What classifier-free guidance scale do they use at inference, and how do they train for guidance?"
+    truth: "CFG scale 1.5; 10% dropout of the camera embeddings during training (§5.1)."
+    expect_terms: ["1.5", "10%|10 %|ten percent|0.1"]
+  - q: "What learning rate, batch size and EMA decay do they use for the diffusion model?"
+    truth: "Learning rate 5e-5, batch size 48, EMA decay 0.9995 (§5.1, Table 11)."
+    expect_terms: ["48", "0.9995", "5 ?× ?10|5e-5|5x10|0.00005|5 x 10"]
+  - q: "How many evaluation samples do they use per dataset for novel view synthesis?"
+    truth: "200 samples per dataset for Re10K, DL3DV and Mip-NeRF 360 (50 for ETH3D depth) (App. A.3)."
+    expect_terms: ["200"]
+  - q: "How long does GLD take to sample one scene compared to the VAE baseline?"
+    truth: "66.1 s sampling for GLD vs 28.0 s for VAE (and 35.2 s for DINO), Table 15 (App. D.2)."
+    expect_terms: ["66.1|66.8", "28.0|28 s|28s"]
+  - q: "Which stage of GLD's inference pipeline takes the most time?"
+    truth: "Level-1 sampling, 37.8 s; the level-0 cascade adds 28.4 s (Table 15B)."
+    expect_terms: ["37.8", "level.?1|Lv.?1|level one"]
+  - q: "With only one source view on RealEstate10K, how does GLD's PSNR compare to the VAE and DINO baselines?"
+    truth: "GLD 13.50 vs DINO 13.49 and VAE 12.99 (Table 4, N=1, Re10K)."
+    expect_terms: ["13.50|13.5", "12.99"]
+  - q: "What losses are used to train the RGB decoder?"
+    truth: "A weighted sum of L1, LPIPS and adversarial (GAN) losses, following RAE (App. A.1, Table 11)."
+    expect_terms: ["L1|ℓ1|l1", "LPIPS", "adversarial|GAN"]
+  - q: "What architecture is the RGB decoder?"
+    truth: "A ViT-XL (Table 11)."
+    expect_terms: ["ViT-XL|ViT XL|ViT‑XL"]
+  - q: "At what resolutions is GLD trained?"
+    truth: "Randomly chosen per sample from 504x504, 504x378, 504x336 and 504x280, matching DA3's training resolutions (§5.1)."
+    expect_terms: ["504", "378|336|280"]

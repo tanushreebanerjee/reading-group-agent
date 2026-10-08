@@ -13,7 +13,7 @@ name_match_ratio: 80
 group_members: []
 
 audio_device: "BlackHole 2ch"
-mode: ask            # ask | engaged
+mode: ask            # ask | engaged | discuss
 
 stt:
   backend: faster-whisper   # faster-whisper | deepgram
@@ -177,7 +177,15 @@ trigger:
   thresholds:
     contradiction: 0.7
     gap: 0.7
-  cooldown_s: 180
+    point: 0.8              # discuss mode only; stricter: an extra point is optional
+  cooldown_s: 180           # between any two hands
+  type_cooldown_s:
+    point: 300              # and at least this long between two points
+  point_recent_s: 60        # a point must quote something said in the last N seconds
+  expire_s:                 # lower a hand nobody revealed after N seconds (0 = never)
+    point: 120
+    gap: 240
+    contradiction: 0
   dedup_ratio: 70
   context_s: 45             # transcript context around each logged entry
 

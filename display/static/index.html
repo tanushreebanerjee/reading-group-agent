@@ -22,6 +22,7 @@
   #hand .type { font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
   #hand.contradiction .type { color: var(--contra); }
   #hand.gap .type { color: var(--gap); }
+  #hand.point .type { color: #7ee787; }
   #hand button { font: inherit; font-size: 1.3vw; padding: .5vh 1.1vw; border-radius: 999px; cursor: pointer;
     border: 1px solid var(--hand); background: transparent; color: var(--fg); }
   #hand button:hover { background: #3a3218; }
@@ -95,7 +96,7 @@ function handle(m) {
       if (m.name) $("name").firstChild.textContent = m.name + " ";
       if (m.latency_s != null) $("latency").textContent = `last answer: ${m.latency_s.toFixed(1)} s`;
       if (m.models) $("models").textContent =
-        `answers: ${m.models.answer}` + (m.mode === "engaged" ? ` · hands: ${m.models.trigger}` : "");
+        `answers: ${m.models.answer}` + (m.mode !== "ask" ? ` · hands: ${m.models.trigger}` : "");
       break;
     case "answer_start":
       answerId = m.id; $("label").textContent = "Answer";

@@ -18,7 +18,7 @@ def parse_args(argv=None):
     ap.add_argument("--config", default=None)
     ap.add_argument("--paper", required=True, help="paper PDF")
     ap.add_argument("--brief", default=None, help="default: briefs/<paper stem>/brief.md")
-    ap.add_argument("--mode", choices=["ask", "engaged"], default=None)
+    ap.add_argument("--mode", choices=["ask", "engaged", "discuss"], default=None)
     ap.add_argument("--replay", metavar="WAV", default=None)
     ap.add_argument("--speed", type=float, default=1.0)
     ap.add_argument("--record", action="store_true", help="save live audio to WAV in the meeting folder")

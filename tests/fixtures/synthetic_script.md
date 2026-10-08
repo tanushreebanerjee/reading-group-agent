@@ -31,6 +31,12 @@ events:
     question: "Why did they need a separate cascaded model for level zero?"
     expected: "Generating level 0 independently misaligns the feature hierarchy, so M1->0 generates level 0 conditioned on the generated level 1 latent (Section 4.4)."
     expect_terms: ["level 1", "4.4"]
+  - id: point1
+    kind: point          # discuss mode only: adds to the live thread, corrects nobody
+    turn: 28
+    said: "Sampling in a feature space ... might not be cheaper than a VAE at inference time"
+    truth: "Table 15 (App. D.2): GLD sampling 66.1 s vs 28.0 s (VAE) and 35.2 s (DINO) per RealEstate10K scene; the level-0 cascade adds 28.4 s."
+    match_terms: ["66.1|66.8|28.0|28.4|Table 15|D.2|latency|slower|inference"]
 ---
 
 # Synthetic reading group discussion: GLD

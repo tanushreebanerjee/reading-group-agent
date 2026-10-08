@@ -53,7 +53,7 @@ def find_logs(target: Path) -> list[Path]:
 
 
 # Suppressed for reasons a threshold change would not affect: excluded from precision.
-NOT_THRESHOLD = {"duplicate", "ungrounded", "invalid"}
+NOT_THRESHOLD = {"duplicate", "ungrounded", "invalid", "stale", "already_said"}
 
 
 def report(entries: list[Labelled], thresholds: list[float], current: dict | None = None) -> str:

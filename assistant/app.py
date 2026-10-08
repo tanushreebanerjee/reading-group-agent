@@ -13,7 +13,7 @@ from assistant.hands import Hand, HandQueue
 from assistant.names import NameDetector
 from assistant.questions import Question, QuestionCollector
 from assistant import settings as S
-from assistant.triggers import Gate, TriggerChecker
+from assistant.triggers import HAND_MODES, MODE_TYPES, Gate, TriggerChecker
 from core.llm import make_llm, same_resource, served_by
 from core.paper import Paper
 from core.transcript import Segment, TranscriptStore, format_segments
@@ -56,8 +56,10 @@ class App:
 
         t = cfg.get("trigger", {})
         self.trigger_llm = make_llm(cfg["llm"]["trigger"])
-        self.checker = TriggerChecker(cfg, self.trigger_llm, brief, paper)
-        self.gate = Gate(t.get("thresholds", {}), float(t.get("cooldown_s", 180)), float(t.get("dedup_ratio", 70)))
+        self.checker = TriggerChecker(cfg, self.trigger_llm, brief, paper, mode=self.mode)
+        self.gate = Gate(t.get("thresholds", {}), float(t.get("cooldown_s", 180)), float(t.get("dedup_ratio", 70)),
+                         type_cooldown_s=dict(t.get("type_cooldown_s") or {}),
+                         allowed=MODE_TYPES.get(self.mode, MODE_TYPES["engaged"]))
         self.hands = HandQueue()
 
         # mid-meeting settings (control page): what each role's model came from
@@ -251,6 +253,9 @@ class App:
             transcript = self.recent_transcript(window)
             name = self.cfg.get("assistant_name", "Sherlock")
             human = [s.text for s in self.store.window(self.now, window) if s.speaker != name]
+            # a "point" must add to what was said in the last few seconds, not an old thread
+            recent = [s.text for s in self.store.window(self.now, float(t.get("point_recent_s", 60)))
+                      if s.speaker != name]
             async with self.trigger_lock:
                 t0 = time.monotonic()
                 r = await asyncio.to_thread(self.checker.check, transcript, self.gate.raised_reasons)
@@ -258,7 +263,8 @@ class App:
             now = self.now
             # don't let slow checks crowd out answers: wait at least 1.5x the last check's duration
             next_t = max(next_t, now + 1.5 * took * self.source.clock.speed)
-            outcome = self.gate.check(r, now, human)
+            outcome = self.gate.check(r, now, human, recent)
+            await self.expire_hands(now)
             if outcome == "none":
                 log(f"    .. trigger check at {now:.0f}s: none ({took:.1f}s)")
                 continue
@@ -272,6 +278,15 @@ class App:
                 f"{r.quote!r} | {r.reason}")
             if outcome == "raised":
                 await self.raise_hand(tid, r, now, transcript)
+
+    async def expire_hands(self, now: float) -> None:
+        """Lower hands nobody revealed in time (trigger.expire_s per type): the topic has moved on."""
+        gone = self.hands.expire(now, self.cfg.get("trigger", {}).get("expire_s") or {})
+        for h in gone:
+            self.events.write("hand_status", id=h.id, status="expired", t=round(now, 2))
+            log(f"    ✋ {h.id} expired ({h.trigger}, not revealed within its time limit)")
+        if gone:
+            await self.send_hand_state()
 
     async def raise_hand(self, tid: str, r, now: float, transcript: str) -> None:
         hid = f"H{len(self.hands.hands) + 1}"
@@ -440,11 +455,21 @@ class App:
 
     def set_mode(self, mode: str) -> None:
         self.mode = self.cfg["mode"] = mode
-        if mode == "engaged" and not (self.trigger_task and not self.trigger_task.done()):
+        self.checker.mode = mode
+        self.gate.allowed = MODE_TYPES.get(mode, ())
+        if mode in HAND_MODES and not (self.trigger_task and not self.trigger_task.done()):
             self.trigger_task = asyncio.create_task(self.trigger_loop())
         elif mode == "ask" and self.trigger_task:
             self.trigger_task.cancel()
             self.trigger_task = None
+
+    async def warm(self, name: str, fn) -> None:
+        t0 = time.monotonic()
+        try:
+            await asyncio.to_thread(fn)
+            log(f"[assistant] {name} model warm ({time.monotonic() - t0:.1f}s)")
+        except Exception as e:
+            log(f"[assistant] WARNING: {name} warmup failed: {e}")
 
     def warm_voice(self) -> None:
         """Load the voice model now so the first spoken answer isn't delayed by it."""
@@ -484,10 +509,15 @@ class App:
             log(f"[assistant] answer model warm ({time.monotonic() - t0:.1f}s)")
         except Exception as e:
             log(f"[assistant] WARNING: answer model warmup failed: {e}")
+        # the hand checker and hand-text models may be different (e.g. a GPU model with the whole
+        # paper in its prompt): warm them in the background so the first hand isn't slow
+        if self.mode in HAND_MODES:
+            for name, fn in (("hand checker", self.checker.warmup), ("hand text", self.interjector.warmup)):
+                self.spawn(self.warm(name, fn))
         loops = [asyncio.create_task(self.question_loop())]
         if hasattr(self.source, "last_sound"):
             loops.append(asyncio.create_task(self.audio_watch()))
-        if self.mode == "engaged":
+        if self.mode in HAND_MODES:
             self.trigger_task = asyncio.create_task(self.trigger_loop())
         self.loop = asyncio.get_running_loop()
         if self.voice_mode() != "off":

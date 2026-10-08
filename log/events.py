@@ -4,9 +4,10 @@ Event kinds:
   meeting_start {mode, source, paper, brief, config}
   answer        {id, t, question, q_start, q_end, text, latency_s, first_token_s, cited, sources}
   trigger       {id, t, trigger, confidence, reason, outcome}
-                 outcome: raised | below_threshold | cooldown | duplicate | invalid
+                 outcome: raised | below_threshold | cooldown | duplicate | ungrounded | stale |
+                          already_said | invalid
   hand          {id, t, trigger_id, trigger, confidence, reason, text, status, status_t}
-                 status: revealed | dismissed | ignored (set when it changes)
+                 status: revealed | dismissed | ignored | expired (set when it changes)
   trigger_skip  {t, why}
   setting       {t, key, value}             changed from the control page
   meeting_end   {t}

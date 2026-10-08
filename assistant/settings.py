@@ -28,7 +28,9 @@ class Field:
 
 
 FIELDS = [
-    Field("mode", "Mode", "choice", ["ask", "engaged"], help="engaged adds raised hands"),
+    Field("mode", "Mode", "choice", ["ask", "engaged", "discuss"],
+          help="engaged: raises a hand for corrections and unanswered questions; "
+               "discuss: also for points that add to the current topic"),
     Field("llm.answer", "Answer model", "model", help="answers and raised-hand text"),
     Field("llm.interjection", "Raised-hand text model", "model",
           help="prepared in the background when a hand goes up, so a slower, more careful model is fine"),
@@ -49,6 +51,7 @@ FIELDS = [
     Field("trigger.cooldown_s", "Raised-hand cooldown (s)", "float", min=0, max=1800),
     Field("trigger.thresholds.contradiction", "Contradiction threshold", "float", min=0, max=1),
     Field("trigger.thresholds.gap", "Gap threshold", "float", min=0, max=1),
+    Field("trigger.thresholds.point", "Point threshold (discuss mode)", "float", min=0, max=1),
 ]
 BY_KEY = {f.key: f for f in FIELDS}
 

@@ -13,8 +13,13 @@ class Hand:
     confidence: float
     reason: str
     text: str                 # the prepared interjection (not shown until revealed)
-    status: str = "pending"   # pending | revealed | dismissed | ignored
+    status: str = "pending"   # pending | revealed | dismissed | ignored | expired
     status_t: float | None = None
+
+
+# Reveal/Dismiss act on the most important pending hand: a correction outranks an
+# unanswered question, which outranks an extra point.
+PRIORITY = {"contradiction": 0, "gap": 1, "point": 2}
 
 
 class HandQueue:
@@ -29,9 +34,20 @@ class HandQueue:
         self.hands.append(hand)
 
     def head(self) -> Hand | None:
-        """Oldest pending hand: the one Reveal/Dismiss acts on."""
+        """The pending hand Reveal/Dismiss acts on: highest priority, then oldest."""
         p = self.pending
-        return p[0] if p else None
+        return min(p, key=lambda h: (PRIORITY.get(h.trigger, 9), h.t)) if p else None
+
+    def expire(self, now: float, ttl: dict) -> list[Hand]:
+        """Drop pending hands older than their type's ttl (seconds; missing or 0 = never).
+        A point about a topic the group has left is noise, so it lowers its hand."""
+        out = []
+        for h in self.pending:
+            limit = float(ttl.get(h.trigger) or 0)
+            if limit and now - h.t >= limit:
+                h.status, h.status_t = "expired", now
+                out.append(h)
+        return out
 
     def resolve(self, status: str, now: float) -> Hand | None:
         h = self.head()

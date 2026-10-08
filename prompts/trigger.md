@@ -7,7 +7,7 @@ interjection would clearly help. Look ONLY at what people said in the
 transcript. The brief is reference material: its open questions and weak
 points were never said aloud, so never flag them.
 
-Two reasons count:
+These reasons count:
 
 - "contradiction": a person in the transcript states something about THIS
   paper that conflicts with the brief (a wrong number, a wrong design choice,
@@ -20,6 +20,8 @@ Two reasons count:
   ... No idea, let's move on." Never flag questions addressed to $name by
   name, or questions $name already answered (lines marked "$name:").
 
+$point_rule
+
 Otherwise answer "none". "none" is the right answer almost all the time.
 Do not flag something listed under "Already raised".
 
@@ -30,7 +32,7 @@ Confidence:
 - below 0.5: a stretch.
 
 Return ONLY a JSON object:
-{"trigger": "contradiction" | "gap" | "none",
+{"trigger": $types,
  "quote": "<the person's exact words from the transcript, copied verbatim; empty for none>",
  "confidence": <0.0-1.0>,
  "reason": "<at most 25 words: the correct fact and its location; empty for none>"}
