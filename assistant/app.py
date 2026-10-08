@@ -14,7 +14,7 @@ from assistant.names import NameDetector
 from assistant.questions import Question, QuestionCollector
 from assistant import settings as S
 from assistant.triggers import Gate, TriggerChecker
-from core.llm import make_llm, same_resource
+from core.llm import make_llm, same_resource, served_by
 from core.paper import Paper
 from core.transcript import Segment, TranscriptStore, format_segments
 from display.server import Hub, serve
@@ -110,11 +110,12 @@ class App:
 
     def models_in_use(self) -> dict:
         def show(role, llm):
-            label = S.describe(self.cfg["llm"][role])
-            fb = getattr(llm, "fallback", None)
-            if fb is not None and not llm._use_primary():
-                label = f"{S.describe(fb.cfg)} (fallback)"
-            return label
+            # walk the fallback chain to the level currently serving requests
+            fell_back = False
+            while getattr(llm, "fallback", None) is not None and not llm._use_primary():
+                llm, fell_back = llm.fallback, True
+            cfg = llm.primary.cfg if hasattr(llm, "primary") else llm.cfg
+            return S.describe(cfg) + (" (fallback)" if fell_back else "")
         return {"answer": show("answer", self.answer_llm), "trigger": show("trigger", self.trigger_llm),
                 "stt": self.cfg["stt"].get("model")}
 
@@ -196,7 +197,7 @@ class App:
                           first_words_s=first_words and round(first_words, 2),
                           llm_s=round(res.latency_s, 2), first_token_s=res.first_token_s and round(res.first_token_s, 2),
                           cited=res.cited, sources=res.sources,
-                          served_by=repr(getattr(self.answer_llm, "last_used", self.answer_llm)))
+                          served_by=repr(served_by(self.answer_llm)))
         log(f"    -> {aid} (first words {first_words or -1:.1f}s / complete {e2e:.1f}s after question end, llm {res.latency_s:.1f}s"
             f"{'' if res.cited else ', NO CITATION'}): {res.text}")
 

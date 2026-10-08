@@ -20,7 +20,9 @@ import requests
 
 
 class LLMError(RuntimeError):
-    pass
+    def __init__(self, msg: str, retry_after: float | None = None):
+        super().__init__(msg)
+        self.retry_after = retry_after   # seconds the provider asked us to wait (rate limits)
 
 
 class LLM:
@@ -261,16 +263,28 @@ class OpenAILLM(LLM):
                 break
             time.sleep(wait + 0.2)
         if r.status_code != 200:
-            raise LLMError(f"{self.name} {r.status_code}: {r.text[:300]}")
+            raise LLMError(f"{self.name} {r.status_code}: {r.text[:300]}",
+                           retry_after=retry_wait_s(r) if r.status_code == 429 else None)
         return r
 
     def complete(self, system, user, *, json_mode=False, max_tokens=None, temperature=None):
         r = self._request(system, user, json_mode, max_tokens, temperature, stream=False)
-        return r.json()["choices"][0]["message"]["content"] or ""
+        choice = r.json()["choices"][0]
+        text = choice["message"].get("content") or ""
+        if not text.strip():
+            raise self._empty(choice.get("finish_reason"))
+        return text
+
+    def _empty(self, finish_reason) -> LLMError:
+        """No visible text. With hidden reasoning this usually means the model spent all of
+        max_tokens thinking; raise so a fallback can answer (no rate-limit wait: retry_after=0)."""
+        why = "spent all max_tokens thinking" if finish_reason == "length" else f"finish_reason={finish_reason}"
+        return LLMError(f"{self.name} ({self.model}): empty answer ({why})", retry_after=0)
 
     def stream(self, system, user, *, json_mode=False, max_tokens=None, temperature=None):
         r = self._request(system, user, json_mode, max_tokens, temperature, stream=True)
         r.encoding = "utf-8"  # SSE responses often omit the charset; requests would guess Latin-1
+        got_text, finish = False, None
         try:
             for line in r.iter_lines(decode_unicode=True):
                 if not line or not line.startswith("data:"):
@@ -279,11 +293,15 @@ class OpenAILLM(LLM):
                 if data == "[DONE]":
                     break
                 choices = json.loads(data).get("choices") or [{}]
+                finish = choices[0].get("finish_reason") or finish
                 chunk = (choices[0].get("delta") or {}).get("content")
                 if chunk:
+                    got_text = got_text or bool(chunk.strip())
                     yield chunk
         except requests.RequestException as e:
             raise LLMError(f"{self.name} ({self.model}): stream broke: {e}") from e
+        if not got_text:
+            raise self._empty(finish)
 
 
 class FallbackLLM(LLM):
@@ -309,16 +327,17 @@ class FallbackLLM(LLM):
         return self.clock() >= self.skip_until
 
     def _failed(self, e: Exception) -> None:
-        self.skip_until = self.clock() + self.retry_after_s
-        self.log(f"[llm] {self.primary!r} failed ({e}); using {self.fallback!r} "
-                 f"for the next {self.retry_after_s:.0f}s")
+        # a rate limit says how long to wait; otherwise (outage, missing key) use retry_after_s
+        wait = getattr(e, "retry_after", None)
+        wait = self.retry_after_s if wait is None else min(self.retry_after_s, wait + 1)
+        self.skip_until = self.clock() + wait
+        self.log(f"[llm] {self.primary!r} failed ({str(e)[:160]}); using {self.fallback!r} for {wait:.0f}s")
 
     def complete(self, system, user, **kw):
         if self._use_primary():
+            self.last_used = self.primary
             try:
-                out = self.primary.complete(system, user, **kw)
-                self.last_used = self.primary
-                return out
+                return self.primary.complete(system, user, **kw)
             except LLMError as e:
                 self._failed(e)
         self.last_used = self.fallback
@@ -327,10 +346,10 @@ class FallbackLLM(LLM):
     def stream(self, system, user, **kw):
         if self._use_primary():
             started = False
+            self.last_used = self.primary
             try:
                 for piece in self.primary.stream(system, user, **kw):
-                    started = True
-                    self.last_used = self.primary
+                    started = started or bool(piece.strip())
                     yield piece
                 return
             except LLMError as e:
@@ -381,6 +400,13 @@ BACKENDS = {
     "openrouter": OpenAILLM,
     "fake": FakeLLM,
 }
+
+
+def served_by(llm: LLM) -> LLM:
+    """The backend that handled the last call, following a fallback chain to its end."""
+    while isinstance(llm, FallbackLLM):
+        llm = llm.last_used
+    return llm
 
 
 def same_resource(a: dict, b: dict) -> bool:

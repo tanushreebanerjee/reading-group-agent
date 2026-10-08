@@ -162,3 +162,46 @@ def test_claude_cli_never_sees_api_key_by_default(monkeypatch):
     llm = make_llm({"backend": "claude-cli", "model": "opus"})
     assert "ANTHROPIC_API_KEY" not in llm.env()
     assert make_llm({"backend": "claude-cli", "use_api_key": True}).env()["ANTHROPIC_API_KEY"] == "sk-should-not-leak"
+
+
+def test_fallback_waits_only_as_long_as_rate_limit_asks():
+    t = [0.0]
+
+    class Limited(Broken):
+        def complete(self, system, user, **kw):
+            self.calls += 1
+            raise LLMError("429", retry_after=10)
+
+    lim = Limited()
+    f, _ = fallback_pair(lim, t)
+    f.complete("s", "u")
+    t[0] = 12            # past the 10 s (+1) the provider asked for, well before retry_after_s=60
+    f.complete("s", "u")
+    assert lim.calls == 2
+
+
+def test_fallback_chain_three_levels():
+    t = [0.0]
+    cfg = {"backend": "groq", "model": "a",
+           "fallback": {"backend": "groq", "model": "b",
+                        "fallback": {"backend": "fake", "responses": "local"}}}
+    import os
+    os.environ.pop("GROQ_API_KEY", None)
+    f = make_llm(cfg)
+    f.log = f.fallback.log = lambda m: None
+    assert f.complete("s", "u") == "local"
+    assert f.fallback.last_used is f.fallback.fallback
+
+
+def test_empty_thinking_answer_falls_through(monkeypatch):
+    """Hidden reasoning that uses all max_tokens returns no text: fall back, don't show a blank."""
+    from core.llm import served_by
+    monkeypatch.setenv("GROQ_API_KEY", "k")
+    lines = ["data: " + json.dumps({"choices": [{"delta": {"content": ""}, "finish_reason": "length"}]}),
+             "data: [DONE]"]
+    monkeypatch.setattr(llm_mod.requests, "post", lambda *a, **kw: FakeResp(lines=lines))
+    f = make_llm({"backend": "groq", "model": "m", "fallback": {"backend": "fake", "responses": "fallback answer"}})
+    f.log = lambda m: None
+    assert "".join(f.stream("s", "u")).strip() == "fallback answer"
+    assert served_by(f) is f.fallback
+    assert f.skip_until <= f.clock() + 1.5      # not a rate limit: retry the primary next time
