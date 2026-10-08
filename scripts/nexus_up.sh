@@ -31,8 +31,8 @@ connect() {
   "${SSH[@]}" -fN -o ControlMaster=yes -o ControlPersist=8h "$HOST"
 }
 remote() { "${SSH[@]}" "$HOST" "$@"; }
-job_state() { remote "squeue -h -j $1 -o '%T %N %r' 2>/dev/null" || true; }
-ready_line() { remote "grep -h RGA_READY ~/rga/rga-ollama-$1.log 2>/dev/null | tail -1" || true; }
+job_state() { remote "squeue -h -j $1 -o '%T %N %r'" 2>/dev/null || true; }
+ready_line() { remote "grep -h RGA_READY ~/rga/rga-ollama-$1.log | tail -1" 2>/dev/null || true; }
 tunnel_ok() { curl -fs -m 3 "http://127.0.0.1:$LOCAL_PORT/api/version" >/dev/null 2>&1; }
 
 if [ "${1:-}" = "--check" ]; then
