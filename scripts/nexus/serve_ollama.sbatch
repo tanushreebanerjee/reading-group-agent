@@ -11,7 +11,7 @@
 
 set -euo pipefail
 SCRATCH="${RGA_SCRATCH:-/fs/nexus-scratch/$USER}/rga-ollama"
-MODELS="${RGA_MODELS:-qwen3.8:27b}"
+MODELS="${RGA_MODELS:-qwen3:32b}"
 NUM_CTX="${RGA_NUM_CTX:-32768}"
 mkdir -p "$SCRATCH/bin" "$SCRATCH/models"
 

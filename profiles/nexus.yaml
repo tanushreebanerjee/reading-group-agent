@@ -1,5 +1,5 @@
-# The full setup: discuss mode, every role on the Nexus GPU with the whole paper in
-# context, and spoken answers and raised hands. Start the GPU first (scripts/nexus_up.sh).
+# The full setup: discuss mode, every role on the Nexus GPU (Qwen3 32B: a dense model, so the
+# cached paper is reused across requests) with the whole paper in context, and spoken answers and raised hands. Start the GPU first (scripts/nexus_up.sh).
 #   python -m assistant --paper papers/<paper>.pdf --profile nexus
 # If Nexus is unreachable, each role falls through to Groq, then the local model, within
 # seconds (Groq and local use retrieved excerpts instead of the whole paper).
@@ -24,7 +24,7 @@ trigger:
 llm:
   answer: &nexus
     backend: ollama
-    model: qwen3.8:27b
+    model: qwen3:32b
     where: nexus
     host: http://127.0.0.1:11435
     num_ctx: 32768          # whole paper + brief + transcript; matches scripts/nexus_up.sh

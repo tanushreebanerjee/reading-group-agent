@@ -36,6 +36,12 @@ def load_config(path: str | Path | None = None, overrides: dict | None = None,
     if path == DEFAULT_CONFIG and LOCAL_CONFIG.exists():
         with open(LOCAL_CONFIG) as f:
             cfg = deep_merge(cfg, yaml.safe_load(f) or {})
+    # config.local.yaml may name a profile to use when none is given (default_profile: nexus);
+    # --profile none turns it off for one run
+    if profile is None:
+        profile = cfg.get("default_profile")
+    if profile in ("none", ""):
+        profile = None
     if profile:
         pf = Path(profile) if Path(profile).suffix else PROFILES_DIR / f"{profile}.yaml"
         if not pf.exists():

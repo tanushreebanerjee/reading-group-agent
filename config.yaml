@@ -118,9 +118,9 @@ model_presets:
     fallback: {backend: ollama, model: qwen2.5:7b, num_ctx: 8192, keep_alive: 30m, max_tokens: 200}
   # Needs scripts/nexus_up.sh running (UMD VPN + Nexus GPU job + tunnel); see README.
   # If the tunnel drops, calls fail within timeout_s and fall through to Groq, then local.
-  "Nexus · Qwen3.8 27B, whole paper":
+  "Nexus · Qwen3 32B, whole paper":
     backend: ollama
-    model: qwen3.8:27b        # same model as the Groq default; here with the full paper in context
+    model: qwen3:32b          # dense model: the cached paper is reused across requests
     host: http://127.0.0.1:11435
     num_ctx: 32768            # paper (~18k tokens) + brief + transcript; match RGA_NEXUS_NUM_CTX
     context: full_paper       # this model sees the whole paper; Groq/local fallbacks use excerpts
@@ -145,7 +145,7 @@ model_presets:
 # or from the control page. The voice plays into output_device, which Zoom uses as the
 # laptop's microphone (unmute the laptop in Zoom). Listening pauses while it speaks.
 voice:
-  mode: "off"               # off | answers | answers+reveal (a raised hand is spoken only after Reveal)
+  mode: "answers+reveal"               # off | answers | answers+reveal (a raised hand is spoken only after Reveal)
   backend: kokoro           # kokoro (local) | say (macOS) | groq (Orpheus, cloud)
   engine: auto              # kokoro: auto (Apple GPU via MLX if available, else CPU) | mlx | onnx
   output_device: "BlackHole 16ch"   # "default" = laptop speakers, for testing

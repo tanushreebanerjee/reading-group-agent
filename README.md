@@ -63,7 +63,7 @@ The laptop joins the room's Zoom call as a separate participant.
 
 Discuss mode (answers when asked, plus raised hands for corrections, unanswered
 questions and points that add to the current topic), the best models we can run
-(Qwen3.8 27B on a Nexus GPU with the whole paper in context), and Sherlock speaking
+(Qwen3 32B on a Nexus GPU with the whole paper in context), and Sherlock speaking
 its answers and any hand you reveal. All of it comes from one flag, `--profile nexus`
 (`profiles/nexus.yaml`). If Nexus is unreachable, each model falls back to Groq, then
 the local one, automatically.
@@ -92,7 +92,7 @@ python -m assistant --paper papers/<paper>.pdf --profile nexus
 
 Wait for "model warm" (×3), "[voice] ready" and "listening on BlackHole 2ch". Screen-share
 the display at http://127.0.0.1:8765; keep http://127.0.0.1:8765/control open on the
-laptop only (it should show `qwen3.8:27b (nexus)` for all three models).
+laptop only (it should show `qwen3:32b (nexus)` for all three models).
 
 **During:** "Sherlock, ..." then pause: the answer is shown and spoken. A ✋ shows only
 its type (contradiction, gap, point); **Reveal** (R, or the button on /control) shows and
@@ -225,7 +225,7 @@ page, cuts it off.
 
 ## Nexus GPU (optional, UMD)
 
-Runs Qwen3.8 27B (the same model as the Groq default) with the whole paper in context on one Nexus GPU for answers and raised-hand checks: no rate limits,
+Runs Qwen3 32B with the whole paper in context on one Nexus GPU for answers and raised-hand checks: no rate limits,
 nothing leaves UMD, and hand checks take ~1–2 s instead of 10–20 s. Audio, Whisper, the
 display and the voice stay on the Mac; only prompt text goes through an ssh tunnel.
 
@@ -239,7 +239,7 @@ scripts/nexus_up.sh --check
 ```
 
 Then start the assistant with `--profile nexus` (see Meeting day), or pick
-**Nexus · Qwen3.8 27B, whole paper** for individual models on the control page.
+**Nexus · Qwen3 32B, whole paper** for individual models on the control page.
 
 ```bash
 scripts/nexus_down.sh

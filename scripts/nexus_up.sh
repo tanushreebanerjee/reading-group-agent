@@ -13,9 +13,9 @@ HOST="${RGA_NEXUS_HOST:-umiacs}"                 # ssh alias for the login node
 ACCOUNT="${RGA_NEXUS_ACCOUNT:-vulcan-zwicker}"  # vulcan-ampere only allows lab accounts
 PARTITION="${RGA_NEXUS_PARTITION:-vulcan-ampere}"
 QOS="${RGA_NEXUS_QOS:-vulcan-default}"           # vulcan-default-h200 for the H200 node
-GRES="${RGA_NEXUS_GRES:-gpu:rtxa6000:1}"         # 48 GB: 27B model + whole paper in context
+GRES="${RGA_NEXUS_GRES:-gpu:rtxa6000:1}"         # 48 GB: 32B model + whole paper in context
 TIME="${RGA_NEXUS_TIME:-04:00:00}"
-MODELS="${RGA_NEXUS_MODELS:-qwen3.8:27b}"
+MODELS="${RGA_NEXUS_MODELS:-qwen3:32b}"
 NUM_CTX="${RGA_NEXUS_NUM_CTX:-32768}"            # must match num_ctx in the Nexus preset
 LOCAL_PORT="${RGA_NEXUS_PORT:-11435}"            # local Ollama keeps 11434
 
