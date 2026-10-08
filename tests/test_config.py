@@ -25,7 +25,9 @@ def test_profile_layers_over_config():
     from core.config import load_config
     cfg = load_config(profile="nexus", overrides={"mode": "engaged"})
     assert cfg["llm"]["answer"]["context"] == "full_paper"
-    assert cfg["llm"]["interjection"]["context"] == "full_paper" and cfg["llm"]["trigger"]["context"] == "retrieval"
+    # answers: whole paper on their own server; hands: short prompts on the other
+    assert cfg["llm"]["interjection"]["context"] == "retrieval" and cfg["llm"]["trigger"]["context"] == "retrieval"
+    assert cfg["llm"]["answer"]["host"] != cfg["llm"]["trigger"]["host"] == cfg["llm"]["interjection"]["host"]
     assert cfg["llm"]["trigger"]["temperature"] == 0.0
     assert cfg["voice"]["mode"] == "answers+reveal"
     assert cfg["mode"] == "engaged"          # CLI overrides still win
