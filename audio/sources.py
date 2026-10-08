@@ -44,7 +44,9 @@ class ReplaySource:
 
     def cache_path(self) -> Path:
         h = hashlib.sha1(self.path.read_bytes() + self.prompt.encode()).hexdigest()[:12]
-        model = self.cfg["stt"].get("model", "model").replace("/", "_")
+        s = self.cfg["stt"]
+        model = (s.get("parakeet_model") if s.get("backend") == "parakeet-mlx" else s.get("model", "model")) or "model"
+        model = model.replace("/", "_")
         return Path(self.cfg["paths"]["cache_dir"]) / f"{self.path.stem}.{h}.{model}.jsonl"
 
     def load_segments(self) -> list[Segment]:

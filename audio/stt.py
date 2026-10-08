@@ -56,6 +56,47 @@ class FasterWhisperSTT(STT):
         return self._run(str(path))
 
 
+class ParakeetMLXSTT(STT):
+    """NVIDIA Parakeet on the Apple GPU (mlx-audio). On the M4 it transcribes an utterance in
+    ~0.9 s versus ~2.8 s for Whisper small.en on the CPU, at slightly lower word error on the
+    test meeting. English only; it takes no prompt, so names and terms can't be primed.
+    All MLX calls run on one dedicated thread (MLX streams are per thread)."""
+
+    def __init__(self, cfg: dict, **_):
+        from concurrent.futures import ThreadPoolExecutor
+
+        self.cfg = cfg["stt"]
+        self.model_name = self.cfg.get("parakeet_model", "mlx-community/parakeet-tdt-0.6b-v2")
+        self.pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="parakeet-mlx")
+        self.model = self.pool.submit(self._load).result()
+
+    def _load(self):
+        from mlx_audio.stt.utils import load_model
+
+        return load_model(self.model_name)
+
+    def _run(self, audio, offset: float, **kw) -> list[Segment]:
+        import mlx.core as mx
+
+        result = self.model.generate(audio if isinstance(audio, str) else mx.array(audio), **kw)
+        out = []
+        for s in getattr(result, "sentences", None) or []:
+            text = s.text.strip()
+            if text:
+                out.append(Segment(round(offset + s.start, 2), round(offset + s.end, 2), text))
+        if not out and getattr(result, "text", "").strip():  # no timestamps: one segment for the chunk
+            dur = len(audio) / 16000 if not isinstance(audio, str) else 0.0
+            out.append(Segment(round(offset, 2), round(offset + dur, 2), result.text.strip()))
+        return out
+
+    def transcribe(self, audio, offset=0.0):
+        return self.pool.submit(self._run, audio.astype(np.float32), offset).result()
+
+    def transcribe_file(self, path):
+        # long files in overlapping chunks (live mode never needs this)
+        return self.pool.submit(self._run, str(path), 0.0, chunk_duration=60.0, overlap_duration=5.0).result()
+
+
 class DeepgramSTT(STT):
     """Optional paid backend with diarization. NOT IMPLEMENTED in the first pass beyond file mode stub."""
 
@@ -69,6 +110,8 @@ def make_stt(cfg: dict, hotwords: str | None = None, initial_prompt: str | None 
     backend = cfg["stt"].get("backend", "faster-whisper")
     if backend == "faster-whisper":
         return FasterWhisperSTT(cfg, hotwords=hotwords, initial_prompt=initial_prompt)
+    if backend == "parakeet-mlx":
+        return ParakeetMLXSTT(cfg)
     if backend == "deepgram":
         return DeepgramSTT(cfg)
     raise ValueError(f"unknown stt backend {backend!r}")

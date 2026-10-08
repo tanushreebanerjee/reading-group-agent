@@ -16,7 +16,8 @@ audio_device: "BlackHole 2ch"
 mode: ask            # ask | engaged | discuss
 
 stt:
-  backend: faster-whisper   # faster-whisper | deepgram
+  backend: faster-whisper   # faster-whisper | parakeet-mlx (Apple GPU, ~3x faster) | deepgram
+  parakeet_model: mlx-community/parakeet-tdt-0.6b-v2
   model: small.en           # base.en is the lighter fallback
   compute_type: int8
   cpu_threads: 4

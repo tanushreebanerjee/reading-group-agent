@@ -48,6 +48,18 @@ def collect(events: list[dict]) -> dict:
     return out
 
 
+def _summarize_with(cfg: dict, llm, system: str, text: str, paper: str | None) -> str:
+    from core.prompts import load_prompt
+
+    limit = int(llm.cfg.get("summary_chars", 12000))
+    parts = [text[i:i + limit] for i in range(0, len(text), limit)]
+    if len(parts) > 1:  # map-reduce when the meeting is longer than this model's context
+        partial = [llm.complete(system, load_prompt(cfg, "summary_user", paper=paper or "unknown", transcript=p))
+                   for p in parts]
+        text = "\n".join(partial)
+    return llm.complete(system, load_prompt(cfg, "summary_user", paper=paper or "unknown", transcript=text)).strip()
+
+
 def summarize(cfg: dict, segs: list[Segment], paper: str | None, brief: str = "") -> str:
     from core.llm import make_llm
     from core.prompts import load_prompt, system_prompt
@@ -55,17 +67,21 @@ def summarize(cfg: dict, segs: list[Segment], paper: str | None, brief: str = ""
 
     if not segs:
         return "_No transcript._"
-    llm = make_llm(cfg["llm"].get("summary") or cfg["llm"]["answer"])
+    from core.llm import LLMError, chain
+
     system = system_prompt(cfg, brief, "summary")
-    text = format_segments(segs)
-    # map-reduce for long meetings so the local model's context isn't exceeded
-    limit = 12000
-    parts = [text[i:i + limit] for i in range(0, len(text), limit)]
-    if len(parts) > 1:
-        partial = [llm.complete(system, load_prompt(cfg, "summary_user", paper=paper or "unknown", transcript=p))
-                   for p in parts]
-        text = "\n".join(partial)
-    out = llm.complete(system, load_prompt(cfg, "summary_user", paper=paper or "unknown", transcript=text)).strip()
+    transcript = format_segments(segs)
+    # Try each backend of the summary chain on its own, so each splits the transcript to fit
+    # its context (summary_chars: a long-context GPU model takes a whole meeting in one pass).
+    errors = []
+    for llm in chain(make_llm(cfg["llm"].get("summary") or cfg["llm"]["answer"])):
+        try:
+            out = _summarize_with(cfg, llm, system, transcript, paper)
+            break
+        except LLMError as e:
+            errors.append(str(e)[:120])
+    else:
+        return "_Summary unavailable: " + "; ".join(errors) + "_"
     bullets = [ln for ln in out.splitlines() if ln.strip().startswith(("-", "*"))]
     return "\n".join(bullets[:5]) if bullets else out
 
@@ -149,12 +165,13 @@ def main(argv=None):
     ap.add_argument("meeting_dir")
     ap.add_argument("--no-summary", action="store_true")
     ap.add_argument("--config", default=None)
+    ap.add_argument("--profile", default=None, help="e.g. nexus: summarize with the Nexus model")
     args = ap.parse_args(argv)
     name = "log.md"
     if (Path(args.meeting_dir) / name).exists():
         name = "log.rebuilt.md"  # never overwrite a log that may already contain labels
         print(f"log.md exists (it may contain labels); writing {name} instead", file=sys.stderr)
-    print(build_log(load_config(args.config), args.meeting_dir, not args.no_summary, name))
+    print(build_log(load_config(args.config, profile=args.profile), args.meeting_dir, not args.no_summary, name))
 
 
 if __name__ == "__main__":

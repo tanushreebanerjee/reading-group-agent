@@ -411,6 +411,15 @@ BACKENDS = {
 }
 
 
+def chain(llm: LLM) -> list[LLM]:
+    """The backends of a fallback chain in order (a plain backend is a chain of one)."""
+    out = []
+    while isinstance(llm, FallbackLLM):
+        out.append(llm.primary)
+        llm = llm.fallback
+    return out + [llm]
+
+
 def active(llm: LLM) -> LLM:
     """The backend the next call will try first (skipping fallback levels on cooldown)."""
     while isinstance(llm, FallbackLLM):

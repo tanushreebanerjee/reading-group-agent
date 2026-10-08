@@ -6,6 +6,9 @@
 
 mode: discuss               # ask + corrections/unanswered questions + points to add
 
+stt:
+  backend: parakeet-mlx     # Apple GPU: ~0.9 s per utterance vs ~2.8 s for Whisper on the CPU
+
 voice:
   mode: answers+reveal      # speak direct answers, and any hand when it is revealed
   output_device: "BlackHole 16ch"   # Zoom's microphone
@@ -48,3 +51,11 @@ llm:
     think: true
     max_tokens: 1500
     timeout_s: 60
+  summary:                  # after the meeting: nobody is waiting, so think, in one pass
+    <<: *nexus
+    context: retrieval      # transcript + brief only (the whole paper would overflow 32k)
+    think: true
+    max_tokens: 2000
+    timeout_s: 180
+    summary_chars: 80000    # a whole meeting in one pass (~20k tokens)
+    fallback: {backend: ollama, model: qwen2.5:7b, num_ctx: 8192, keep_alive: 30m, max_tokens: 400, summary_chars: 12000}
