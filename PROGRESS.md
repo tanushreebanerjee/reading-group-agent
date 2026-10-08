@@ -157,9 +157,14 @@ See README. Phase 0: `python -m audio --list-devices`, `pytest -q`,
 ## Known issues
 
 Added 2026-10-07 (evening):
-- Nexus model is qwen3:32b. qwen3.8:27b is a hybrid/recurrent model: llama.cpp can't reuse
-  its cached prefix when request types alternate, so it re-read the ~25k-token paper (~25 s)
-  on many requests. qwen3:32b (dense) matched its accuracy (10/11) at ~0.5 s first words.
+- Nexus: qwen3.8:27b on two Ollama servers in one job (answers with the whole paper on one
+  server, hand checks and hand text with short prompts on the other). qwen3.8 is a
+  hybrid/recurrent model: llama.cpp can't reuse a cached prefix once a different prompt type
+  used the slot, so one shared server re-read the ~25k-token paper (25-80 s) whenever request
+  types mixed. qwen3:32b (dense) cached fine and matched accuracy (10/11) but raised more
+  unhelpful points and wrote one wrong hand text; qwen3:30b (MoE) scored 5/11.
+  Final discuss e2e: answers 3.0-3.8 s to first words, checks 1.5-4 s, hands 12-17 s after
+  the cue, hand text 2-4 s, 1 unplanned (useful) hand: PASS.
 - `--share`: Cloudflare quick tunnel + secret key in the link; viewers can reveal/dismiss/stop
   speech, never change settings or open /control. Tested end to end (403 without the key, 200
   with it, live updates over wss, link dead after exit). localhost.run's TLS failed in testing.

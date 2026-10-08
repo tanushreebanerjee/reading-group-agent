@@ -22,6 +22,19 @@ from display.server import Hub, serve
 from log.events import EventLog
 
 
+COMMON = set("""the and for that this with what does they their them about from have has had are was were
+which when where why how who into than then there these those just also only like paper model models
+compared versus using used use does did doing can could would should will know think remember table
+section figure page baseline baselines""".split())
+
+
+def key_terms_of(text: str) -> set[str]:
+    """Distinctive words of a question or hand (to tell whether they are about the same thing)."""
+    import re
+
+    return {w for w in re.findall(r"[a-z0-9]+", text.lower()) if len(w) >= 3 and w not in COMMON}
+
+
 def log(msg: str) -> None:
     print(msg, file=sys.stderr, flush=True)
 
@@ -139,6 +152,22 @@ class App:
     def recent_transcript(self, seconds: float) -> str:
         return format_segments(self.store.window(self.now, seconds))
 
+    def checker_transcript(self, seconds: float) -> str:
+        """The transcript the hand checker sees, with lines that already got a hand marked as
+        handled: otherwise it keeps re-flagging the same line (filtered as a duplicate) and
+        doesn't look at what was said next."""
+        from rapidfuzz import fuzz
+
+        quotes = [h.quote.lower() for h in self.hands.hands if h.quote]
+        segs = self.store.window(self.now, seconds)
+        lines = []
+        for s in segs:
+            text = s.text.strip()
+            if quotes and any(fuzz.partial_ratio(q, text.lower()) >= 85 for q in quotes):
+                text = "(already raised by you; ignore this line)"
+            lines.append(Segment(s.start, s.end, text, speaker=s.speaker))
+        return format_segments(lines)
+
     # ---------- transcript ----------
 
     async def consume(self) -> None:
@@ -199,6 +228,7 @@ class App:
         if self.voice_mode() in ("answers", "answers+reveal") and not res.text.startswith("(answer failed"):
             self.speak(res.text)
         await self.send_status()
+        await self.supersede_hands(q)
         # record the answer in the transcript so later prompts know the question was answered
         self.store.add(Segment(round(q.end + 0.01, 2), round(self.now, 2), res.text,
                                speaker=self.cfg.get("assistant_name", "Sherlock")))
@@ -252,7 +282,7 @@ class App:
                 next_t = self.now + 2.0  # retry shortly instead of losing a whole interval
                 continue
             last_seen = len(self.store.segments)
-            transcript = self.recent_transcript(window)
+            transcript = self.checker_transcript(window)
             name = self.cfg.get("assistant_name", "Sherlock")
             human = [s.text for s in self.store.window(self.now, window) if s.speaker != name]
             # a "point" must add to what was said in the last few seconds, not an old thread
@@ -265,7 +295,9 @@ class App:
             now = self.now
             # don't let slow checks crowd out answers: wait at least 1.5x the last check's duration
             # On a server shared with answers, leave room for them; a concurrent server needn't
-            next_t = max(next_t, now + (1.5 if self.shared_llm else 1.0) * took * self.source.clock.speed)
+            # (capped: one pathologically slow check must not silence the checker for minutes)
+            wait = min((1.5 if self.shared_llm else 1.0) * took, float(t.get("max_backoff_s", 15)))
+            next_t = max(next_t, now + wait * self.source.clock.speed)
             outcome = self.gate.check(r, now, human, recent)
             await self.expire_hands(now)
             if outcome == "none":
@@ -291,6 +323,23 @@ class App:
                     if s.speaker != self.cfg.get("assistant_name", "Sherlock")), default=(0, None))
         return round(best[1], 2) if q and best[0] >= 80 else None
 
+    async def supersede_hands(self, q: Question) -> None:
+        """Someone asked Sherlock directly: a point or gap hand on the same topic, raised just
+        before, is covered by the answer (e.g. a point for "do we remember the table?" right before "Sherlock, what's in
+        the table?"). Lower it rather than offer the same thing twice."""
+        window = float(self.cfg.get("trigger", {}).get("supersede_s", 30))
+        gone = []
+        asked = key_terms_of(q.text)
+        for h in self.hands.pending:
+            related = len(asked & key_terms_of(f"{h.quote} {h.reason}")) >= 2
+            if h.trigger in ("point", "gap") and related and q.start - window <= h.t <= self.now:
+                h.status, h.status_t = "expired", self.now
+                gone.append(h)
+                self.events.write("hand_status", id=h.id, status="expired", t=round(self.now, 2), why="answered")
+                log(f"    ✋ {h.id} lowered: the question to Sherlock covered it")
+        if gone:
+            await self.send_hand_state()
+
     async def expire_hands(self, now: float) -> None:
         """Lower hands nobody revealed in time (trigger.expire_s per type): the topic has moved on."""
         gone = self.hands.expire(now, self.cfg.get("trigger", {}).get("expire_s") or {})
@@ -314,6 +363,9 @@ class App:
         self.spawn(self.prepare_hand(hand, r, transcript))
 
     async def prepare_hand(self, hand: Hand, r, transcript: str) -> None:
+        # a question to Sherlock comes first: the hand is already up, its text can wait
+        while self.answering or self.collector.collecting:
+            await asyncio.sleep(0.5)
         t0 = time.monotonic()
         async with self.interject_lock:
             # retrieve with the person's words plus the checker's short reason (which names the topic)
@@ -543,15 +595,21 @@ class App:
         await self.send_status()
         t0 = time.monotonic()
         try:
-            await asyncio.to_thread(self.answerer.warmup)
-            log(f"[assistant] answer model warm ({time.monotonic() - t0:.1f}s)")
+            # Answers and hand text share the whole-paper prompt. Loading it for both at once puts
+            # it in two request slots, so an answer and a hand's text arriving together both start
+            # warm (loading them one after another would reuse the same slot).
+            jobs = [asyncio.to_thread(self.answerer.warmup)]
+            if self.mode in HAND_MODES:
+                jobs.append(asyncio.to_thread(self.interjector.warmup))
+            await asyncio.gather(*jobs)
+            log(f"[assistant] answer{' and hand text' if len(jobs) > 1 else ''} model warm ({time.monotonic() - t0:.1f}s)")
         except Exception as e:
             log(f"[assistant] WARNING: answer model warmup failed: {e}")
         # the hand checker and hand-text models may be different (e.g. a GPU model with the whole
-        # paper in its prompt): warm them in the background so the first hand isn't slow
+        # paper in its prompt): warm them one after another in the background (warming them all at
+        # once makes each load the paper at the same time and all of them slow)
         if self.mode in HAND_MODES:
-            for name, fn in (("hand checker", self.checker.warmup), ("hand text", self.interjector.warmup)):
-                self.spawn(self.warm(name, fn))
+            self.spawn(self.warm("hand checker", self.checker.warmup))
         loops = [asyncio.create_task(self.question_loop())]
         if hasattr(self.source, "last_sound"):
             loops.append(asyncio.create_task(self.audio_watch()))

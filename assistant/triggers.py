@@ -133,6 +133,11 @@ class TriggerChecker:
         self.brief = brief or "(no brief available)"
         self.paper = paper
         self.mode = mode
+        self.retriever = None
+        if paper is not None:
+            from core.paper import Retriever
+
+            self.retriever = Retriever(paper)
 
     def build(self, transcript: str, already_raised: list[str]) -> tuple[str, str]:
         from core.llm import active
@@ -144,7 +149,18 @@ class TriggerChecker:
                                point_rule=point_rule.strip(),
                                types=" | ".join(f'"{t}"' for t in types + ("none",)))
         raised = "\n".join(f"- {r}" for r in already_raised) or "(none)"
-        user = load_prompt(self.cfg, "trigger_user", transcript=transcript or "(silence)", raised=raised)
+        # Without the whole paper, give the checker the passages that match what was just said
+        # (a short prompt keeps frequent checks fast on any model; the hand text that follows
+        # may still see the whole paper).
+        excerpts = "(the full paper text is in the context above)" if full else "(none)"
+        if not full and self.retriever is not None and transcript:
+            k = int(self.cfg.get("trigger", {}).get("retrieval_k", 3))
+            recent = " ".join(transcript.splitlines()[-8:])
+            from core.paper import Retriever
+
+            excerpts = Retriever.format(self.retriever.search(recent, k)) or "(none)"
+        user = load_prompt(self.cfg, "trigger_user", transcript=transcript or "(silence)", raised=raised,
+                           excerpts=excerpts)
         return system, user
 
     def warmup(self) -> None:

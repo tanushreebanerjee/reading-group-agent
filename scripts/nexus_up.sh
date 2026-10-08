@@ -13,11 +13,12 @@ HOST="${RGA_NEXUS_HOST:-umiacs}"                 # ssh alias for the login node
 ACCOUNT="${RGA_NEXUS_ACCOUNT:-vulcan-zwicker}"  # vulcan-ampere only allows lab accounts
 PARTITION="${RGA_NEXUS_PARTITION:-vulcan-ampere}"
 QOS="${RGA_NEXUS_QOS:-vulcan-default}"           # vulcan-default-h200 for the H200 node
-GRES="${RGA_NEXUS_GRES:-gpu:rtxa6000:1}"         # 48 GB: 32B model + whole paper in context
+GRES="${RGA_NEXUS_GRES:-gpu:rtxa6000:1}"         # 48 GB: two copies of the 27B model (answers / hands)
 TIME="${RGA_NEXUS_TIME:-04:00:00}"
-MODELS="${RGA_NEXUS_MODELS:-qwen3:32b}"
+MODELS="${RGA_NEXUS_MODELS:-qwen3.8:27b}"
 NUM_CTX="${RGA_NEXUS_NUM_CTX:-32768}"            # must match num_ctx in the Nexus preset
-LOCAL_PORT="${RGA_NEXUS_PORT:-11435}"            # local Ollama keeps 11434
+LOCAL_PORT="${RGA_NEXUS_PORT:-11435}"            # answers server (local Ollama keeps 11434)
+HANDS_LOCAL_PORT="${RGA_NEXUS_HANDS_PORT:-11436}" # hand checks + hand text server
 
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -33,7 +34,8 @@ connect() {
 remote() { "${SSH[@]}" "$HOST" "$@"; }
 job_state() { remote "squeue -h -j $1 -o '%T %N %r'" 2>/dev/null || true; }
 ready_line() { remote "grep -h RGA_READY ~/rga/rga-ollama-$1.log | tail -1" 2>/dev/null || true; }
-tunnel_ok() { curl -fs -m 3 "http://127.0.0.1:$LOCAL_PORT/api/version" >/dev/null 2>&1; }
+tunnel_ok() { curl -fs -m 3 "http://127.0.0.1:$LOCAL_PORT/api/version" >/dev/null 2>&1 &&
+              curl -fs -m 3 "http://127.0.0.1:$HANDS_LOCAL_PORT/api/version" >/dev/null 2>&1; }
 
 if [ "${1:-}" = "--check" ]; then
   JOB=$(cat "$STATE/job" 2>/dev/null || true)
@@ -47,7 +49,7 @@ if [ "${1:-}" = "--check" ]; then
   else
     echo "ssh: not connected (run scripts/nexus_up.sh)"
   fi
-  tunnel_ok && echo "tunnel: ok (http://127.0.0.1:$LOCAL_PORT)" || echo "tunnel: down"
+  tunnel_ok && echo "tunnel: ok (answers :$LOCAL_PORT, hands :$HANDS_LOCAL_PORT)" || echo "tunnel: down"
   exit 0
 fi
 
@@ -89,18 +91,19 @@ while true; do
   sleep 10
 done
 NODE=$(echo "$READY" | sed -E 's/.*node=([^ ]+).*/\1/')
-PORT=$(echo "$READY" | sed -E 's/.*port=([0-9]+).*/\1/')
+PORT=$(echo "$READY" | sed -E 's/.* port=([0-9]+).*/\1/')
+HPORT=$(echo "$READY" | sed -E 's/.*hands_port=([0-9]+).*/\1/')
 
 # (re)open the tunnel through the existing connection: no new Duo prompt. Close the tunnel
 # this script opened last time first (it may point at an old job's node and port).
-for spec in "$(cat "$STATE/forward" 2>/dev/null)" "$LOCAL_PORT:$NODE:$PORT"; do
-  [ -n "$spec" ] && "${SSH[@]}" -O cancel -L "$spec" "$HOST" 2>/dev/null || true
+for spec in $(cat "$STATE/forward" 2>/dev/null) "$LOCAL_PORT:$NODE:$PORT" "$HANDS_LOCAL_PORT:$NODE:$HPORT"; do
+  "${SSH[@]}" -O cancel -L "$spec" "$HOST" 2>/dev/null || true
 done
-"${SSH[@]}" -O forward -L "$LOCAL_PORT:$NODE:$PORT" "$HOST"
-echo "$LOCAL_PORT:$NODE:$PORT" > "$STATE/forward"
+"${SSH[@]}" -O forward -L "$LOCAL_PORT:$NODE:$PORT" -L "$HANDS_LOCAL_PORT:$NODE:$HPORT" "$HOST"
+echo "$LOCAL_PORT:$NODE:$PORT $HANDS_LOCAL_PORT:$NODE:$HPORT" > "$STATE/forward"
 for _ in 1 2 3 4 5; do tunnel_ok && break; sleep 1; done
 if tunnel_ok; then
-  echo "ready: $MODELS on $NODE, at http://127.0.0.1:$LOCAL_PORT"
+  echo "ready: $MODELS on $NODE: answers at http://127.0.0.1:$LOCAL_PORT, hands at http://127.0.0.1:$HANDS_LOCAL_PORT"
   echo "start the assistant with --profile nexus (see README > Meeting day)"
 else
   echo "tunnel did not come up (node $NODE port $PORT)"; exit 1

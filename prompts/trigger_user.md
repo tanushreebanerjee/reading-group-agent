@@ -1,3 +1,6 @@
+Paper excerpts that match the recent conversation:
+$excerpts
+
 Already raised:
 $raised
 

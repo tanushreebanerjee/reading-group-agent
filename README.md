@@ -63,7 +63,7 @@ The laptop joins the room's Zoom call as a separate participant.
 
 Discuss mode (answers when asked, plus raised hands for corrections, unanswered
 questions and points that add to the current topic), the best models we can run
-(Qwen3 32B on a Nexus GPU with the whole paper in context), and Sherlock speaking
+(Qwen3.8 27B on a Nexus GPU with the whole paper in context), and Sherlock speaking
 its answers and any hand you reveal. All of it comes from one flag, `--profile nexus`
 (`profiles/nexus.yaml`). If Nexus is unreachable, each model falls back to Groq, then
 the local one, automatically.
@@ -92,7 +92,7 @@ python -m assistant --paper papers/<paper>.pdf --profile nexus
 
 Wait for "model warm" (×3), "[voice] ready" and "listening on BlackHole 2ch". Screen-share
 the display at http://127.0.0.1:8765; keep http://127.0.0.1:8765/control open on the
-laptop only (it should show `qwen3:32b (nexus)` for all three models).
+laptop only (it should show `qwen3.8:27b (nexus)` for all three models).
 
 **Instead of screen-sharing**, add `--share`: Sherlock prints a link (also shown on /control
 with a Copy button) to paste in the Zoom chat. Everyone, in the room or remote, opens the live
@@ -233,7 +233,7 @@ page, cuts it off.
 
 ## Nexus GPU (optional, UMD)
 
-Runs Qwen3 32B with the whole paper in context on one Nexus GPU for answers and raised-hand checks: no rate limits,
+Runs Qwen3.8 27B on one Nexus GPU (answers see the whole paper) for answers and raised-hand checks: no rate limits,
 nothing leaves UMD, and hand checks take ~1–2 s instead of 10–20 s. Audio, Whisper, the
 display and the voice stay on the Mac; only prompt text goes through an ssh tunnel.
 
@@ -247,11 +247,16 @@ scripts/nexus_up.sh --check
 ```
 
 Then start the assistant with `--profile nexus` (see Meeting day), or pick
-**Nexus · Qwen3 32B, whole paper** for individual models on the control page.
+**Nexus · Qwen3.8 27B, whole paper** for individual models on the control page.
 
 ```bash
 scripts/nexus_down.sh
 ```
+
+The job runs two model servers on its A6000 (two copies of the model, ~35 GB): one only for
+answers, with the whole paper in context (tunnelled to port 11435), and one for hand checks and
+hand text, which use short prompts (port 11436). Keeping answers on their own server keeps their
+cached paper from being displaced; with one shared server, answers sometimes took 30–80 s.
 
 Defaults: account `vulcan-zwicker`, partition `vulcan-ampere`, QOS `vulcan-default`, one RTX A6000 (48 GB), 4 h. For a 120B-class model use `RGA_NEXUS_GRES=gpu:rtxa6000:2` or the H200 node (`RGA_NEXUS_QOS=vulcan-default-h200 RGA_NEXUS_GRES=gpu:h200-sxm:1`) with `RGA_NEXUS_MODELS=...` and a matching preset.
 Override with `RGA_NEXUS_ACCOUNT`, `RGA_NEXUS_PARTITION`, `RGA_NEXUS_QOS`, `RGA_NEXUS_GRES`

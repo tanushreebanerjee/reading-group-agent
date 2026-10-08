@@ -118,9 +118,9 @@ model_presets:
     fallback: {backend: ollama, model: qwen2.5:7b, num_ctx: 8192, keep_alive: 30m, max_tokens: 200}
   # Needs scripts/nexus_up.sh running (UMD VPN + Nexus GPU job + tunnel); see README.
   # If the tunnel drops, calls fail within timeout_s and fall through to Groq, then local.
-  "Nexus · Qwen3 32B, whole paper":
+  "Nexus · Qwen3.8 27B, whole paper":
     backend: ollama
-    model: qwen3:32b          # dense model: the cached paper is reused across requests
+    model: qwen3.8:27b        # the job's answers server (scripts/nexus_up.sh)
     host: http://127.0.0.1:11435
     num_ctx: 32768            # paper (~18k tokens) + brief + transcript; match RGA_NEXUS_NUM_CTX
     context: full_paper       # this model sees the whole paper; Groq/local fallbacks use excerpts
