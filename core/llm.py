@@ -58,7 +58,10 @@ class OllamaLLM(LLM):
         super().__init__(cfg)
         import ollama
 
-        self.client = ollama.Client(host=os.environ.get("OLLAMA_HOST") or cfg.get("host"))
+        # a role's own host (e.g. a Nexus tunnel) wins over OLLAMA_HOST, so a local fallback stays local
+        timeout = cfg.get("timeout_s")
+        self.client = ollama.Client(host=cfg.get("host") or os.environ.get("OLLAMA_HOST"),
+                                    **({"timeout": float(timeout)} if timeout else {}))
 
     def _options(self, max_tokens, temperature):
         mt, temp = self._params(max_tokens, temperature)
@@ -410,9 +413,12 @@ def served_by(llm: LLM) -> LLM:
 
 
 def same_resource(a: dict, b: dict) -> bool:
-    """True if two role configs run on the same local server (so their calls contend)."""
+    """True if two role configs run on the same single-request server (so their calls contend).
+    A server started with OLLAMA_NUM_PARALLEL > 1 (e.g. the Nexus job) sets concurrent: true."""
     local = ("ollama",)
     if a.get("backend") not in local or b.get("backend") not in local:
+        return False
+    if a.get("concurrent") and b.get("concurrent"):
         return False
     return (a.get("host") or os.environ.get("OLLAMA_HOST")) == (b.get("host") or os.environ.get("OLLAMA_HOST"))
 

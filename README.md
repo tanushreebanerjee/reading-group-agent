@@ -162,6 +162,36 @@ pick up its voice and send it back through Zoom; otherwise it would transcribe i
 could answer its own answer. **S** on the room display, or **Stop speaking** on the control
 page, cuts it off.
 
+## Nexus GPU (optional, UMD)
+
+Runs Qwen2.5 32B on one Nexus GPU for answers and raised-hand checks: no rate limits,
+nothing leaves UMD, and hand checks take ~1–2 s instead of 10–20 s. Audio, Whisper, the
+display and the voice stay on the Mac; only prompt text goes through an ssh tunnel.
+
+Before the meeting (allow 5–10 minutes; the first run also downloads Ollama and the ~20 GB
+model into `/fs/nexus-scratch/$USER/rga-ollama`):
+
+```bash
+# 1. connect the UMD VPN
+scripts/nexus_up.sh        # one Duo prompt; submits the GPU job, waits, opens the tunnel
+scripts/nexus_up.sh --check
+```
+
+Then pick **Nexus · Qwen2.5 32B** for the answer and hand-checker models on the control
+page, or make it the default in `config.local.yaml` by copying that preset from
+`config.yaml` under `llm: answer:` and `llm: trigger:`. If the VPN or tunnel drops, calls fail
+within 20 s and fall through to Groq, then the local model; re-run `scripts/nexus_up.sh` to
+reattach (it reuses the running job). After the meeting, free the GPU:
+
+```bash
+scripts/nexus_down.sh
+```
+
+Defaults: account `vulcan`, partition `vulcan-ampere`, QOS `vulcan-default`, 1 GPU, 4 h.
+Override with `RGA_NEXUS_ACCOUNT`, `RGA_NEXUS_PARTITION`, `RGA_NEXUS_QOS`, `RGA_NEXUS_GRES`
+(e.g. `gpu:rtxa6000:1` to pin a 48 GB card), `RGA_NEXUS_TIME`, `RGA_NEXUS_HOST` (ssh alias,
+default `umiacs`). Avoid scavenger partitions: their jobs can be preempted mid-meeting.
+
 ## Configuration
 
 Every tunable is in `config.yaml`. Machine- or group-specific overrides go in

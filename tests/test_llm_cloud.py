@@ -205,3 +205,13 @@ def test_empty_thinking_answer_falls_through(monkeypatch):
     assert "".join(f.stream("s", "u")).strip() == "fallback answer"
     assert served_by(f) is f.fallback
     assert f.skip_until <= f.clock() + 1.5      # not a rate limit: retry the primary next time
+
+
+def test_role_host_beats_env_and_concurrent_servers_dont_share_a_lock(monkeypatch):
+    from core.llm import same_resource
+    monkeypatch.setenv("OLLAMA_HOST", "http://elsewhere:11434")
+    nexus = {"backend": "ollama", "model": "qwen2.5:32b", "host": "http://127.0.0.1:11435", "concurrent": True}
+    llm = make_llm(nexus)
+    assert "11435" in str(llm.client._client.base_url)
+    assert not same_resource(nexus, dict(nexus))
+    assert same_resource({"backend": "ollama", "model": "a"}, {"backend": "ollama", "model": "b"})
