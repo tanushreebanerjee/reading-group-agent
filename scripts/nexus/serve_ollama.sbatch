@@ -11,12 +11,12 @@
 
 set -euo pipefail
 SCRATCH="${RGA_SCRATCH:-/fs/nexus-scratch/$USER}/rga-ollama"
-MODELS="${RGA_MODELS:-qwen2.5:32b}"
+MODELS="${RGA_MODELS:-qwen3.8:27b}"
+NUM_CTX="${RGA_NUM_CTX:-32768}"
 mkdir -p "$SCRATCH/bin" "$SCRATCH/models"
 
 if [ ! -x "$SCRATCH/bin/ollama" ]; then
-  echo "installing ollama into $SCRATCH"
-  curl -fsSL https://ollama.com/download/ollama-linux-amd64.tgz | tar -xz -C "$SCRATCH"
+  echo "ollama is not installed in $SCRATCH (scripts/nexus_up.sh installs it from the login node)"; exit 1
 fi
 
 # A free port on this node. The server listens on the node's cluster address so the login
@@ -36,7 +36,7 @@ for _ in $(seq 60); do curl -fs "http://127.0.0.1:$PORT/api/version" >/dev/null 
 for m in $MODELS; do
   "$SCRATCH/bin/ollama" pull "$m"
   # load it onto the GPU now so the first meeting request is fast
-  curl -fs "http://127.0.0.1:$PORT/api/generate" -d "{\"model\":\"$m\",\"prompt\":\"hi\",\"stream\":false,\"options\":{\"num_ctx\":8192,\"num_predict\":1}}" >/dev/null
+  curl -fs "http://127.0.0.1:$PORT/api/generate" -d "{\"model\":\"$m\",\"prompt\":\"hi\",\"stream\":false,\"think\":false,\"options\":{\"num_ctx\":$NUM_CTX,\"num_predict\":1}}" >/dev/null
 done
 
 # nexus_up.sh waits for this line

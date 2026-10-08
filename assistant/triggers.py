@@ -95,13 +95,17 @@ class Gate:
 
 
 class TriggerChecker:
-    def __init__(self, cfg: dict, llm: LLM, brief: str):
+    def __init__(self, cfg: dict, llm: LLM, brief: str, paper=None):
         self.cfg = cfg
         self.llm = llm
         self.brief = brief or "(no brief available)"
+        self.paper = paper
 
     def build(self, transcript: str, already_raised: list[str]) -> tuple[str, str]:
-        system = system_prompt(self.cfg, self.brief, "trigger")
+        from core.llm import active
+
+        full = self.paper is not None and active(self.llm).cfg.get("context") == "full_paper"
+        system = system_prompt(self.cfg, self.brief, "trigger", paper_text=self.paper.full_text if full else None)
         raised = "\n".join(f"- {r}" for r in already_raised) or "(none)"
         user = load_prompt(self.cfg, "trigger_user", transcript=transcript or "(silence)", raised=raised)
         return system, user

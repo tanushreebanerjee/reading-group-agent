@@ -164,7 +164,7 @@ page, cuts it off.
 
 ## Nexus GPU (optional, UMD)
 
-Runs Qwen2.5 32B on one Nexus GPU for answers and raised-hand checks: no rate limits,
+Runs Qwen3.8 27B (the same model as the Groq default) with the whole paper in context on one Nexus GPU for answers and raised-hand checks: no rate limits,
 nothing leaves UMD, and hand checks take ~1–2 s instead of 10–20 s. Audio, Whisper, the
 display and the voice stay on the Mac; only prompt text goes through an ssh tunnel.
 
@@ -177,7 +177,7 @@ scripts/nexus_up.sh        # one Duo prompt; submits the GPU job, waits, opens t
 scripts/nexus_up.sh --check
 ```
 
-Then pick **Nexus · Qwen2.5 32B** for the answer and hand-checker models on the control
+Then pick **Nexus · Qwen3.8 27B, whole paper** for the answer and hand-checker models on the control
 page, or make it the default in `config.local.yaml` by copying that preset from
 `config.yaml` under `llm: answer:` and `llm: trigger:`. If the VPN or tunnel drops, calls fail
 within 20 s and fall through to Groq, then the local model; re-run `scripts/nexus_up.sh` to
@@ -187,7 +187,7 @@ reattach (it reuses the running job). After the meeting, free the GPU:
 scripts/nexus_down.sh
 ```
 
-Defaults: account `vulcan`, partition `vulcan-ampere`, QOS `vulcan-default`, 1 GPU, 4 h.
+Defaults: account `vulcan-zwicker`, partition `vulcan-ampere`, QOS `vulcan-default`, one RTX A6000 (48 GB), 4 h. For a 120B-class model use `RGA_NEXUS_GRES=gpu:rtxa6000:2` or the H200 node (`RGA_NEXUS_QOS=vulcan-default-h200 RGA_NEXUS_GRES=gpu:h200-sxm:1`) with `RGA_NEXUS_MODELS=...` and a matching preset.
 Override with `RGA_NEXUS_ACCOUNT`, `RGA_NEXUS_PARTITION`, `RGA_NEXUS_QOS`, `RGA_NEXUS_GRES`
 (e.g. `gpu:rtxa6000:1` to pin a 48 GB card), `RGA_NEXUS_TIME`, `RGA_NEXUS_HOST` (ssh alias,
 default `umiacs`). Avoid scavenger partitions: their jobs can be preempted mid-meeting.

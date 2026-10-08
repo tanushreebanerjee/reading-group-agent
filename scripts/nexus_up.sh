@@ -10,12 +10,13 @@
 # VPN drop: it finds the running job and only reopens the tunnel.
 # Settings (override with environment variables):
 HOST="${RGA_NEXUS_HOST:-umiacs}"                 # ssh alias for the login node
-ACCOUNT="${RGA_NEXUS_ACCOUNT:-vulcan}"
+ACCOUNT="${RGA_NEXUS_ACCOUNT:-vulcan-zwicker}"  # vulcan-ampere only allows lab accounts
 PARTITION="${RGA_NEXUS_PARTITION:-vulcan-ampere}"
-QOS="${RGA_NEXUS_QOS:-vulcan-default}"
-GRES="${RGA_NEXUS_GRES:-gpu:1}"                  # e.g. gpu:rtxa6000:1 to pin a 48 GB card
+QOS="${RGA_NEXUS_QOS:-vulcan-default}"           # vulcan-default-h200 for the H200 node
+GRES="${RGA_NEXUS_GRES:-gpu:rtxa6000:1}"         # 48 GB: 27B model + whole paper in context
 TIME="${RGA_NEXUS_TIME:-04:00:00}"
-MODELS="${RGA_NEXUS_MODELS:-qwen2.5:32b}"
+MODELS="${RGA_NEXUS_MODELS:-qwen3.8:27b}"
+NUM_CTX="${RGA_NEXUS_NUM_CTX:-32768}"            # must match num_ctx in the Nexus preset
 LOCAL_PORT="${RGA_NEXUS_PORT:-11435}"            # local Ollama keeps 11434
 
 set -euo pipefail
@@ -37,11 +38,14 @@ tunnel_ok() { curl -fs -m 3 "http://127.0.0.1:$LOCAL_PORT/api/version" >/dev/nul
 if [ "${1:-}" = "--check" ]; then
   JOB=$(cat "$STATE/job" 2>/dev/null || true)
   echo "job: ${JOB:-none}"
-  if "${SSH[@]}" -O check "$HOST" 2>/dev/null && [ -n "$JOB" ]; then
-    echo "state: $(job_state "$JOB")"
-    echo "server: $(ready_line "$JOB")"
+  if "${SSH[@]}" -O check "$HOST" 2>/dev/null; then
+    echo "ssh: connected"
+    if [ -n "$JOB" ]; then
+      echo "state: $(job_state "$JOB")"
+      echo "server: $(ready_line "$JOB")"
+    fi
   else
-    echo "ssh: not connected"
+    echo "ssh: not connected (run scripts/nexus_up.sh)"
   fi
   tunnel_ok && echo "tunnel: ok (http://127.0.0.1:$LOCAL_PORT)" || echo "tunnel: down"
   exit 0
@@ -54,8 +58,18 @@ if [ -n "$JOB" ] && [ -n "$(job_state "$JOB")" ]; then
   echo "reusing job $JOB"
 else
   remote "mkdir -p ~/rga && cat > ~/rga/serve_ollama.sbatch" < "$HERE/nexus/serve_ollama.sbatch"
-  JOB=$(remote "cd ~/rga && sbatch --parsable --account=$ACCOUNT --partition=$PARTITION --qos=$QOS \
-         --gres=$GRES --time=$TIME --export=ALL,RGA_MODELS='$MODELS' serve_ollama.sbatch")
+  # one-time: install Ollama into scratch from the login node (it has zstd; batch nodes may not)
+  remote "D=/fs/nexus-scratch/\$USER/rga-ollama; [ -x \$D/bin/ollama ] && exit 0; mkdir -p \$D && echo 'installing ollama into '\$D && \
+          curl -fsSL https://ollama.com/download/ollama-linux-amd64.tar.zst | zstd -d | tar -x -C \$D && \$D/bin/ollama --version"
+  if ! JOB=$(remote "cd ~/rga && sbatch --parsable --account=$ACCOUNT --partition=$PARTITION --qos=$QOS \
+         --gres=$GRES --time=$TIME --export=ALL,RGA_MODELS='$MODELS',RGA_NUM_CTX=$NUM_CTX serve_ollama.sbatch"); then
+    echo "sbatch rejected $ACCOUNT / $PARTITION / $QOS / $GRES. What $PARTITION allows, and your accounts:"
+    remote "scontrol show partition $PARTITION -o | tr ' ' '\n' | grep -E '^Allow(Accounts|Qos)='; \
+            sacctmgr -nP show assoc user=\$USER format=account,qos" || true
+    echo "Re-run with RGA_NEXUS_ACCOUNT=... RGA_NEXUS_QOS=... scripts/nexus_up.sh"
+    exit 1
+  fi
+  JOB=$(echo "$JOB" | tail -1)
   echo "$JOB" > "$STATE/job"
   echo "submitted job $JOB ($PARTITION, $GRES, $TIME)"
 fi

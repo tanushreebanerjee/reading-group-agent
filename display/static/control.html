@@ -52,6 +52,7 @@
       <span>Mode</span><span id="mode">–</span>
       <span>Answer model</span><span id="m-answer">–</span>
       <span>Hand checker</span><span id="m-trigger">–</span>
+      <span>Hand text</span><span id="m-interjection">–</span>
       <span>Speech-to-text</span><span id="m-stt">–</span>
       <span>Last answer</span><span id="latency">–</span>
       <span>Voice</span><span><span id="voice">–</span> <button id="stop" disabled>Stop speaking</button></span>
@@ -96,7 +97,7 @@ function handle(m) {
       : silent ? `no audio from ${m.device || "input"}: check Zoom's speaker setting`
       : `yes (${m.source})` + (m.heard ? `, ${m.heard} lines heard` : "");
     $("mode").textContent = m.mode;
-    if (m.models) { $("m-answer").textContent = m.models.answer; $("m-trigger").textContent = m.models.trigger;
+    if (m.models) { $("m-answer").textContent = m.models.answer; $("m-trigger").textContent = m.models.trigger; $("m-interjection").textContent = m.models.interjection;
                     $("m-stt").textContent = m.models.stt; }
     if (m.latency_s != null) $("latency").textContent = `${m.latency_s.toFixed(1)} s to first words`;
     $("voice").textContent = m.voice === "off" ? "off" : (m.speaking ? "speaking…" : `on (${m.voice})`);

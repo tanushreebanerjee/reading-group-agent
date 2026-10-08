@@ -30,6 +30,8 @@ class Field:
 FIELDS = [
     Field("mode", "Mode", "choice", ["ask", "engaged"], help="engaged adds raised hands"),
     Field("llm.answer", "Answer model", "model", help="answers and raised-hand text"),
+    Field("llm.interjection", "Raised-hand text model", "model",
+          help="prepared in the background when a hand goes up, so a slower, more careful model is fine"),
     Field("llm.trigger", "Raised-hand checker model", "model",
           help="runs every few seconds in engaged mode; cloud free tiers may hit rate limits"),
     Field("voice.mode", "Speak", "choice", ["off", "answers", "answers+reveal"],

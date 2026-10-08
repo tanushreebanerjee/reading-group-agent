@@ -58,17 +58,25 @@ class Answerer:
         self.mode = a.get("context", "retrieval")
         self.max_sentences = int(a.get("max_sentences", 3))
 
+    def context_mode(self) -> str:
+        """full_paper or retrieval. A model's own `context` setting wins over answer.context,
+        so a long-context GPU model can see the whole paper while Groq/local use excerpts."""
+        from core.llm import active
+
+        return active(self.llm).cfg.get("context") or self.mode
+
     def excerpts(self, query: str) -> tuple[str, list[str]]:
         if not self.paper:
             return "(paper text not loaded)", []
-        if self.mode == "full_paper":
-            return self.paper.full_text, ["full paper"]
+        if self.context_mode() == "full_paper":
+            return "(the full paper text is in the context above)", ["full paper"]
         chunks = self.retriever.search(query, self.k)
         return Retriever.format(chunks), [c.label for c in chunks]
 
     def build(self, prompt_name: str, question: str, transcript: str, **extra) -> tuple[str, str, list[str]]:
         excerpts, sources = self.excerpts(question)
-        system = system_prompt(self.cfg, self.brief, prompt_name, max_sentences=self.max_sentences)
+        system = system_prompt(self.cfg, self.brief, prompt_name, paper_text=self.paper_in_prefix(),
+                               max_sentences=self.max_sentences)
         user = load_prompt(self.cfg, f"{prompt_name}_user", excerpts=excerpts, transcript=transcript or "(none)",
                            question=question, **extra)
         return system, user, sources
@@ -109,8 +117,12 @@ class Answerer:
 
     def warmup(self) -> None:
         """Prefill the shared prompt prefix (identity + brief) so the first answer is fast."""
-        system = system_prompt(self.cfg, self.brief, "answer", max_sentences=self.max_sentences)
+        system = system_prompt(self.cfg, self.brief, "answer", paper_text=self.paper_in_prefix(),
+                               max_sentences=self.max_sentences)
         self.llm.complete(system, "Reply with: ready", max_tokens=1)
+
+    def paper_in_prefix(self) -> str | None:
+        return self.paper.full_text if self.paper and self.context_mode() == "full_paper" else None
 
     async def answer(self, question: str, transcript: str, on_delta=None) -> AnswerResult:
         return await self.run("answer", question, transcript, on_delta)

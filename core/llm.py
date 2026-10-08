@@ -67,6 +67,10 @@ class OllamaLLM(LLM):
         mt, temp = self._params(max_tokens, temperature)
         return {"num_ctx": int(self.cfg.get("num_ctx", 8192)), "num_predict": mt, "temperature": temp}
 
+    def _extra(self) -> dict:
+        # think: false turns off reasoning for models that think by default (qwen3.x, gpt-oss)
+        return {"think": self.cfg["think"]} if "think" in self.cfg else {}
+
     def _messages(self, system, user):
         return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
@@ -78,6 +82,7 @@ class OllamaLLM(LLM):
                 format="json" if json_mode else None,
                 options=self._options(max_tokens, temperature),
                 keep_alive=self.cfg.get("keep_alive", "30m"),
+                **self._extra(),
             )
         except Exception as e:  # connection refused, model missing, ...
             raise LLMError(f"ollama ({self.model}): {e}") from e
@@ -92,6 +97,7 @@ class OllamaLLM(LLM):
                 options=self._options(max_tokens, temperature),
                 keep_alive=self.cfg.get("keep_alive", "30m"),
                 stream=True,
+                **self._extra(),
             ):
                 chunk = part["message"]["content"]
                 if chunk:
@@ -403,6 +409,13 @@ BACKENDS = {
     "openrouter": OpenAILLM,
     "fake": FakeLLM,
 }
+
+
+def active(llm: LLM) -> LLM:
+    """The backend the next call will try first (skipping fallback levels on cooldown)."""
+    while isinstance(llm, FallbackLLM):
+        llm = llm.primary if llm._use_primary() else llm.fallback
+    return llm
 
 
 def served_by(llm: LLM) -> LLM:

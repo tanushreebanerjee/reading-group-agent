@@ -48,16 +48,21 @@ class App:
                                            float(cfg.get("question_max_s", 30)))
         self.answer_llm = make_llm(cfg["llm"]["answer"])
         self.answerer = Answerer(cfg, self.answer_llm, brief, paper)
+        # raised-hand text is prepared in the background when a hand goes up, long before
+        # Reveal, so it may use a slower, more careful model than live answers (llm.interjection)
+        cfg["llm"].setdefault("interjection", copy.deepcopy(cfg["llm"]["answer"]))
+        self.interject_llm = make_llm(cfg["llm"]["interjection"])
+        self.interjector = Answerer(cfg, self.interject_llm, brief, paper)
 
         t = cfg.get("trigger", {})
         self.trigger_llm = make_llm(cfg["llm"]["trigger"])
-        self.checker = TriggerChecker(cfg, self.trigger_llm, brief)
+        self.checker = TriggerChecker(cfg, self.trigger_llm, brief, paper)
         self.gate = Gate(t.get("thresholds", {}), float(t.get("cooldown_s", 180)), float(t.get("dedup_ratio", 70)))
         self.hands = HandQueue()
 
         # mid-meeting settings (control page): what each role's model came from
-        self.role_base = {r: copy.deepcopy(cfg["llm"][r]) for r in ("answer", "trigger")}
-        self.model_choice = {"answer": S.FROM_CONFIG, "trigger": S.FROM_CONFIG}
+        self.role_base = {r: copy.deepcopy(cfg["llm"][r]) for r in ("answer", "trigger", "interjection")}
+        self.model_choice = {"answer": S.FROM_CONFIG, "trigger": S.FROM_CONFIG, "interjection": S.FROM_CONFIG}
         self.model_opts: dict[str, dict] = {}
         self.trigger_task: asyncio.Task | None = None
 
@@ -72,6 +77,7 @@ class App:
         self.shared_llm = same_resource(cfg["llm"]["answer"], cfg["llm"]["trigger"])
         self.answer_lock = asyncio.Lock()
         self.trigger_lock = self.answer_lock if self.shared_llm else asyncio.Lock()
+        self.interject_lock = self.lock_for("interjection")
         self.answering = 0
         self.n_answers = 0
         self.n_triggers = 0
@@ -117,7 +123,7 @@ class App:
             cfg = llm.primary.cfg if hasattr(llm, "primary") else llm.cfg
             return S.describe(cfg) + (" (fallback)" if fell_back else "")
         return {"answer": show("answer", self.answer_llm), "trigger": show("trigger", self.trigger_llm),
-                "stt": self.cfg["stt"].get("model")}
+                "interjection": show("interjection", self.interject_llm), "stt": self.cfg["stt"].get("model")}
 
     async def send_hand_state(self) -> None:
         head = self.hands.head()
@@ -270,9 +276,9 @@ class App:
     async def raise_hand(self, tid: str, r, now: float, transcript: str) -> None:
         hid = f"H{len(self.hands.hands) + 1}"
         # prepare the interjection now so Reveal is instant; it is not shown until revealed
-        async with self.answer_lock:
+        async with self.interject_lock:
             # retrieve with the person's words plus the checker's short reason (which names the topic)
-            res = await self.answerer.run("interjection", f"{r.quote} {r.reason}", transcript, trigger=r.trigger,
+            res = await self.interjector.run("interjection", f"{r.quote} {r.reason}", transcript, trigger=r.trigger,
                                           reason=f'"{r.quote}" ({r.reason})', max_sentences=2)
         hand = Hand(hid, round(now, 2), tid, r.trigger, r.confidence, r.reason, res.text)
         self.hands.add(hand)
@@ -390,9 +396,10 @@ class App:
                     self.spawn(asyncio.to_thread(self.warm_voice))
             else:
                 S.set_path(self.cfg, key, value)
-                self.answerer.k = int(self.cfg["answer"].get("retrieval_k", 3))
-                self.answerer.max_sentences = int(self.cfg["answer"].get("max_sentences", 3))
-                self.answerer.mode = self.cfg["answer"].get("context", "retrieval")
+                for a in (self.answerer, self.interjector):
+                    a.k = int(self.cfg["answer"].get("retrieval_k", 3))
+                    a.max_sentences = int(self.cfg["answer"].get("max_sentences", 3))
+                    a.mode = self.cfg["answer"].get("context", "retrieval")
                 self.collector.pause_s = float(self.cfg.get("question_pause_s", 1.5))
                 th = self.cfg["trigger"]
                 self.gate.thresholds = dict(th.get("thresholds", {}))
@@ -419,10 +426,17 @@ class App:
         if role == "answer":
             self.answer_llm = self.answerer.llm = llm
             self.spawn(asyncio.to_thread(self.answerer.warmup))   # load/prefill the new model now
+        elif role == "interjection":
+            self.interject_llm = self.interjector.llm = llm
         else:
             self.trigger_llm = self.checker.llm = llm
         self.shared_llm = same_resource(self.cfg["llm"]["answer"], self.cfg["llm"]["trigger"])
         self.trigger_lock = self.answer_lock if self.shared_llm else asyncio.Lock()
+        self.interject_lock = self.lock_for("interjection")
+
+    def lock_for(self, role: str) -> asyncio.Lock:
+        """Share the answer lock with a role only if both run on one single-request server."""
+        return self.answer_lock if same_resource(self.cfg["llm"]["answer"], self.cfg["llm"][role]) else asyncio.Lock()
 
     def set_mode(self, mode: str) -> None:
         self.mode = self.cfg["mode"] = mode
@@ -461,6 +475,7 @@ class App:
         self.events.write("meeting_start", mode=self.mode, source=str(getattr(self.source, "path", "live")),
                           paper=self.paper.title if self.paper else None, brief=self.brief_path,
                           answer_llm=repr(self.answer_llm), trigger_llm=repr(self.trigger_llm),
+                          interjection_llm=repr(self.interject_llm),
                           stt_model=self.cfg["stt"].get("model"), speed=self.source.clock.speed)
         await self.send_status()
         t0 = time.monotonic()
