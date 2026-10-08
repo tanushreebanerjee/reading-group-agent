@@ -9,7 +9,7 @@ Server -> client messages (JSON, field "type"):
   hand_revealed  {id, trigger, text}
   hand_cleared   {id, count}
   settings       {fields: [{key, label, kind, options, min, max, value}], error?}   # for /control
-Client -> server: {"action": "reveal" | "dismiss"} or {"action": "set", "key": ..., "value": ...}
+Client -> server: {"action": "reveal" | "dismiss" | "stop_speaking"} or {"action": "set", "key": ..., "value": ...}
 Actions are only accepted from pages served by this server (Origin check), so another
 website open in the same browser cannot reveal hands or change settings.
 """
@@ -98,7 +98,7 @@ def create_app(hub: Hub) -> FastAPI:
                     msg = json.loads(raw)
                 except json.JSONDecodeError:
                     continue
-                if (trusted and isinstance(msg, dict) and msg.get("action") in ("reveal", "dismiss", "set")
+                if (trusted and isinstance(msg, dict) and msg.get("action") in ("reveal", "dismiss", "set", "stop_speaking")
                         and hub.on_action):
                     await hub.on_action(msg)
         except WebSocketDisconnect:

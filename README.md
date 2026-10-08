@@ -142,6 +142,25 @@ listed in `log.md`. The model list comes from `model_presets` in `config.yaml` (
 presets appear only when their key is in `.env`) plus every model in local Ollama. The room
 display's status line shows the models in use.
 
+## Spoken answers (optional)
+
+Sherlock can speak its answers into the Zoom call. It's off by default: turn it on with
+`--set voice.mode=answers` (or `answers+reveal` to also speak a raised hand after Reveal),
+or from the control page.
+
+1. `brew install blackhole-16ch` (a second virtual device, separate from the 2ch one Zoom
+   plays into), then restart the audio service as for BlackHole 2ch.
+2. In Zoom on the assistant laptop: **Microphone → BlackHole 16ch**, and unmute.
+3. The voice is Kokoro, running locally (free; the model files download to
+   `~/.cache/kokoro-onnx` on first use, about 350 MB). `voice.backend: say` uses macOS voices
+   instead; `groq` uses Orpheus on Groq once you accept its terms in the Groq console.
+4. To try it without Zoom, set `voice.output_device: default` to hear it on the laptop speakers.
+
+Listening pauses while Sherlock speaks (plus `voice.echo_tail_s`), because the room mics
+pick up its voice and send it back through Zoom; otherwise it would transcribe itself and
+could answer its own answer. **S** on the room display, or **Stop speaking** on the control
+page, cuts it off.
+
 ## Configuration
 
 Every tunable is in `config.yaml`. Machine- or group-specific overrides go in

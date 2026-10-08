@@ -19,3 +19,4 @@ dependencies:
       - pytest
       - rapidfuzz
       - websockets
+      - kokoro-onnx    # local neural TTS for spoken answers (voice output)

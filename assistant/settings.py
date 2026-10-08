@@ -32,6 +32,10 @@ FIELDS = [
     Field("llm.answer", "Answer model", "model", help="answers and raised-hand text"),
     Field("llm.trigger", "Raised-hand checker model", "model",
           help="runs every few seconds in engaged mode; cloud free tiers may hit rate limits"),
+    Field("voice.mode", "Speak", "choice", ["off", "answers", "answers+reveal"],
+          help="answers: speak answers when asked; answers+reveal: also speak a raised hand when revealed"),
+    Field("voice.backend", "Voice", "choice", ["kokoro", "say", "groq"],
+          help="kokoro: local, natural; say: macOS, instant; groq: Orpheus (cloud, accept terms first)"),
     Field("answer.max_sentences", "Answer length (sentences)", "int", min=1, max=6),
     Field("answer.retrieval_k", "Paper excerpts per answer", "int", min=1, max=10,
           help="more = better recall, slower on local models"),
@@ -103,6 +107,8 @@ def role_config(choice: dict, base: dict) -> dict:
 def coerce(f: Field, value):
     """Validate a value from the control page; raise ValueError with a readable message."""
     if f.kind == "choice":
+        if value is False and "off" in f.options:   # YAML/--set read a bare off as False
+            value = "off"
         if value not in f.options:
             raise ValueError(f"{f.label}: choose one of {f.options}")
         return value

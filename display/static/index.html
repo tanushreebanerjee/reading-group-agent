@@ -63,7 +63,7 @@
   <span id="mode">mode: –</span>
   <span id="latency">last answer: –</span>
   <span id="models"></span>
-  <span><kbd>R</kbd> reveal · <kbd>D</kbd> dismiss</span>
+  <span><kbd>R</kbd> reveal · <kbd>D</kbd> dismiss · <kbd>S</kbd> stop speaking</span>
 </footer>
 <script>
 const $ = id => document.getElementById(id);
@@ -138,6 +138,7 @@ document.addEventListener("keydown", e => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === "r" || e.key === "R") act("reveal");
   if (e.key === "d" || e.key === "D") act("dismiss");
+  if (e.key === "s" || e.key === "S") act("stop_speaking");
 });
 connect();
 </script>

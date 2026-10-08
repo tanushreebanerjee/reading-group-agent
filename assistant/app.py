@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -60,6 +61,11 @@ class App:
         self.model_opts: dict[str, dict] = {}
         self.trigger_task: asyncio.Task | None = None
 
+        # voice output (off unless voice.mode is answers or answers+reveal)
+        self.speaker = None
+        self.speaking = False
+        self.loop: asyncio.AbstractEventLoop | None = None
+
         # One call at a time per backend: roles on the same local Ollama share a lock (it
         # serializes anyway, and answers must not queue behind a trigger check); a role on a
         # cloud API gets its own, so a local trigger check never delays a cloud answer.
@@ -99,7 +105,8 @@ class App:
                              "latency_s": self.last_latency, "name": self.cfg.get("assistant_name"),
                              "source": "replay" if getattr(self.source, "path", None) else "live",
                              "heard": len(self.store.segments), "audio_ok": self.audio_ok,
-                             "device": self.cfg.get("audio_device"), "models": self.models_in_use()})
+                             "device": self.cfg.get("audio_device"), "models": self.models_in_use(),
+                             "voice": self.voice_mode(), "speaking": self.speaking})
 
     def models_in_use(self) -> dict:
         def show(role, llm):
@@ -178,6 +185,8 @@ class App:
         self.last_latency = first_words if first_words is not None else e2e
         await self.hub.send({"type": "answer_done", "id": aid, "question": question, "text": res.text,
                              "latency_s": self.last_latency, "complete_s": e2e, "cited": res.cited})
+        if self.voice_mode() in ("answers", "answers+reveal") and not res.text.startswith("(answer failed"):
+            self.speak(res.text)
         await self.send_status()
         # record the answer in the transcript so later prompts know the question was answered
         self.store.add(Segment(round(q.end + 0.01, 2), round(self.now, 2), res.text,
@@ -276,6 +285,11 @@ class App:
         if action == "set":
             await self.apply_setting(str(msg.get("key")), msg.get("value"))
             return
+        if action == "stop_speaking":
+            if self.speaker:
+                await asyncio.to_thread(self.speaker.stop)
+                log("[voice] stopped")
+            return
         if action not in ("reveal", "dismiss"):
             return
         status = {"reveal": "revealed", "dismiss": "dismissed"}[action]
@@ -286,7 +300,53 @@ class App:
         log(f"    ✋ {h.id} {status}")
         if status == "revealed":
             await self.hub.send({"type": "hand_revealed", "id": h.id, "trigger": h.trigger, "text": h.text})
+            if self.voice_mode() == "answers+reveal":
+                self.speak(h.text)
         await self.send_hand_state()
+
+    # ---------- voice output ----------
+
+    def voice_mode(self) -> str:
+        mode = (self.cfg.get("voice") or {}).get("mode", "off")
+        return "off" if mode in (False, None, "") else str(mode)   # YAML reads a bare off as False
+
+    def make_speaker(self):
+        from audio.tts import Speaker, make_tts
+
+        v = self.cfg.get("voice") or {}
+        sp = Speaker(make_tts(v), v.get("output_device"), on_start=self._spoke_start, on_end=self._spoke_end)
+        sp.gain = float(v.get("gain", 1.0))
+        log(f"[voice] {v.get('backend', 'kokoro')} voice, speaking into {sp.device_name}")
+        return sp
+
+    def speak(self, text: str) -> None:
+        if self.speaker is None:
+            try:
+                self.speaker = self.make_speaker()
+            except Exception as e:
+                log(f"[voice] unavailable: {e}")
+                return
+        self.speaker.say(text)
+
+    def _spoke_start(self) -> None:          # called on the speaker thread
+        log(f"[voice] speaking (t={self.now:.1f})")
+        if hasattr(self.source, "muted"):
+            self.source.muted = True
+        self._voice_state(True)
+
+    def _spoke_end(self) -> None:            # called on the speaker thread
+        tail = float((self.cfg.get("voice") or {}).get("echo_tail_s", 0.5))
+        def unmute():
+            if hasattr(self.source, "muted") and not (self.speaker and self.speaker.speaking):
+                self.source.muted = False
+        threading.Timer(tail, unmute).start()
+        log(f"[voice] done (t={self.now:.1f})")
+        self._voice_state(False)
+
+    def _voice_state(self, speaking: bool) -> None:
+        self.speaking = speaking
+        if self.loop:
+            self.loop.call_soon_threadsafe(lambda: self.spawn(self.send_status()))
 
     # ---------- mid-meeting settings ----------
 
@@ -320,6 +380,13 @@ class App:
                 await self.set_model(key.split(".")[1], value)
             elif key == "mode":
                 self.set_mode(value)
+            elif key.startswith("voice."):
+                S.set_path(self.cfg, key, value)
+                if self.speaker:
+                    await asyncio.to_thread(self.speaker.stop)
+                self.speaker = None   # rebuilt (new backend/voice) on next use
+                if self.voice_mode() != "off":
+                    self.spawn(asyncio.to_thread(self.warm_voice))
             else:
                 S.set_path(self.cfg, key, value)
                 self.answerer.k = int(self.cfg["answer"].get("retrieval_k", 3))
@@ -364,6 +431,16 @@ class App:
             self.trigger_task.cancel()
             self.trigger_task = None
 
+    def warm_voice(self) -> None:
+        """Load the voice model now so the first spoken answer isn't delayed by it."""
+        try:
+            if self.speaker is None:
+                self.speaker = self.make_speaker()
+            self.speaker.tts.warmup()
+            log("[voice] ready")
+        except Exception as e:
+            log(f"[voice] unavailable: {e}")
+
     def list_ollama_models(self) -> list[str]:
         try:
             import ollama
@@ -396,6 +473,9 @@ class App:
             loops.append(asyncio.create_task(self.audio_watch()))
         if self.mode == "engaged":
             self.trigger_task = asyncio.create_task(self.trigger_loop())
+        self.loop = asyncio.get_running_loop()
+        if self.voice_mode() != "off":
+            self.spawn(asyncio.to_thread(self.warm_voice))
         self.model_opts = S.model_options(self.cfg, await asyncio.to_thread(self.list_ollama_models))
         await self.send_settings()
         try:
@@ -415,6 +495,8 @@ class App:
             await asyncio.gather(server, return_exceptions=True)
 
     async def finish(self) -> None:
+        if self.speaker:
+            await asyncio.to_thread(self.speaker.stop)
         for h in self.hands.close(self.now):
             self.events.write("hand_status", id=h.id, status="ignored", t=round(self.now, 2))
         self.events.write("meeting_end", t=round(self.now, 2))

@@ -54,6 +54,7 @@
       <span>Hand checker</span><span id="m-trigger">–</span>
       <span>Speech-to-text</span><span id="m-stt">–</span>
       <span>Last answer</span><span id="latency">–</span>
+      <span>Voice</span><span><span id="voice">–</span> <button id="stop" disabled>Stop speaking</button></span>
     </div>
   </section>
 
@@ -98,6 +99,8 @@ function handle(m) {
     if (m.models) { $("m-answer").textContent = m.models.answer; $("m-trigger").textContent = m.models.trigger;
                     $("m-stt").textContent = m.models.stt; }
     if (m.latency_s != null) $("latency").textContent = `${m.latency_s.toFixed(1)} s to first words`;
+    $("voice").textContent = m.voice === "off" ? "off" : (m.speaking ? "speaking…" : `on (${m.voice})`);
+    $("stop").disabled = !m.speaking;
   } else if (m.type === "hand_raised" || m.type === "hand_cleared") {
     const on = m.count > 0;
     $("hand").innerHTML = on ? `<b>${m.trigger}</b>${m.count > 1 ? ` (+${m.count - 1} more)` : ""}` : "none";
@@ -160,6 +163,7 @@ function flash(key) {
 
 $("reveal").onclick = () => send({action: "reveal"});
 $("dismiss").onclick = () => send({action: "dismiss"});
+$("stop").onclick = () => send({action: "stop_speaking"});
 connect();
 </script>
 </body>

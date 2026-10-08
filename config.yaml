@@ -106,6 +106,23 @@ model_presets:
     model: sonnet
     timeout_s: 60
 
+# Spoken answers (Phase 6). Off by default; turn on here, with --set voice.mode=answers,
+# or from the control page. The voice plays into output_device, which Zoom uses as the
+# laptop's microphone (unmute the laptop in Zoom). Listening pauses while it speaks.
+voice:
+  mode: "off"               # off | answers | answers+reveal (a raised hand is spoken only after Reveal)
+  backend: kokoro           # kokoro (local) | say (macOS) | groq (Orpheus, cloud)
+  output_device: "BlackHole 16ch"   # "default" = laptop speakers, for testing
+  voice: af_heart           # kokoro voice: af_heart, af_bella, am_michael, bf_emma, bm_george, ...
+  speed: 1.0
+  lang: en-us
+  kokoro_dir: ~/.cache/kokoro-onnx  # model files download here on first use (~350 MB)
+  kokoro_model: kokoro-v1.0.onnx
+  say_voice: Samantha
+  groq_voice: troy
+  gain: 1.0
+  echo_tail_s: 0.5          # keep listening paused this long after speech ends
+
 question_pause_s: 1.5
 question_max_s: 30          # stop collecting a question after this long regardless
 
