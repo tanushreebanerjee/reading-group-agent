@@ -16,6 +16,8 @@ from core.paper import load_paper
 def parse_args(argv=None):
     ap = argparse.ArgumentParser(prog="python -m assistant")
     ap.add_argument("--config", default=None)
+    ap.add_argument("--profile", default=None,
+                    help="named setup from profiles/, e.g. nexus (discuss mode, Nexus GPU models, spoken output)")
     ap.add_argument("--paper", required=True, help="paper PDF")
     ap.add_argument("--brief", default=None, help="default: briefs/<paper stem>/brief.md")
     ap.add_argument("--mode", choices=["ask", "engaged", "discuss"], default=None)
@@ -45,7 +47,7 @@ def main(argv=None):
         for k in parents:
             node = node.setdefault(k, {})
         node[leaf] = yaml.safe_load(val)
-    cfg = load_config(args.config, overrides)
+    cfg = load_config(args.config, overrides, profile=args.profile)
 
     from assistant.app import App, log
     from audio.sources import make_source, stt_prompt

@@ -1,0 +1,50 @@
+# The full setup: discuss mode, every role on the Nexus GPU with the whole paper in
+# context, and spoken answers and raised hands. Start the GPU first (scripts/nexus_up.sh).
+#   python -m assistant --paper papers/<paper>.pdf --profile nexus
+# If Nexus is unreachable, each role falls through to Groq, then the local model, within
+# seconds (Groq and local use retrieved excerpts instead of the whole paper).
+
+mode: discuss               # ask + corrections/unanswered questions + points to add
+
+voice:
+  mode: answers+reveal      # speak direct answers, and any hand when it is revealed
+  output_device: "BlackHole 16ch"   # Zoom's microphone
+
+trigger:
+  interval_s: 10            # Nexus checks take ~2-4 s, so check more often than the local default
+
+llm:
+  answer: &nexus
+    backend: ollama
+    model: qwen3.8:27b
+    where: nexus
+    host: http://127.0.0.1:11435
+    num_ctx: 32768          # whole paper + brief + transcript; matches scripts/nexus_up.sh
+    context: full_paper
+    think: false            # live answers: no thinking, first words in ~2 s
+    keep_alive: 24h
+    concurrent: true        # the job serves 2 requests at once
+    timeout_s: 30
+    temperature: 0.2
+    max_tokens: 200
+    fallback:
+      backend: groq
+      model: qwen/qwen3.8-27b
+      extra: {reasoning_effort: none}
+      max_tokens: 200
+      timeout_s: 20
+      fallback:
+        backend: groq
+        model: openai/gpt-oss-120b
+        extra: {reasoning_effort: low}
+        max_tokens: 800
+        timeout_s: 20
+        fallback: {backend: ollama, model: qwen2.5:7b, num_ctx: 8192, keep_alive: 30m, max_tokens: 200}
+  trigger:
+    <<: *nexus
+    temperature: 0.0
+  interjection:             # prepared when the hand goes up, before Reveal: time to think
+    <<: *nexus
+    think: true
+    max_tokens: 1500
+    timeout_s: 60

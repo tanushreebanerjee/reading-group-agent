@@ -19,3 +19,12 @@ def test_paths_resolved(cfg):
     from pathlib import Path
 
     assert Path(cfg["paths"]["prompts_dir"]).is_absolute()
+
+
+def test_profile_layers_over_config():
+    from core.config import load_config
+    cfg = load_config(profile="nexus", overrides={"mode": "engaged"})
+    assert cfg["llm"]["answer"]["context"] == "full_paper"
+    assert cfg["llm"]["interjection"]["think"] is True and cfg["llm"]["trigger"]["temperature"] == 0.0
+    assert cfg["voice"]["mode"] == "answers+reveal"
+    assert cfg["mode"] == "engaged"          # CLI overrides still win

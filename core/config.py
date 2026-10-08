@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG = ROOT / "config.yaml"
 LOCAL_CONFIG = ROOT / "config.local.yaml"  # gitignored per-machine/group overrides (e.g. member names)
+PROFILES_DIR = ROOT / "profiles"            # named setups, e.g. --profile nexus
 
 
 def deep_merge(base: dict, override: dict) -> dict:
@@ -23,8 +24,11 @@ def deep_merge(base: dict, override: dict) -> dict:
     return out
 
 
-def load_config(path: str | Path | None = None, overrides: dict | None = None) -> dict[str, Any]:
-    """Read the YAML config, load .env into the environment, apply overrides."""
+def load_config(path: str | Path | None = None, overrides: dict | None = None,
+                profile: str | None = None) -> dict[str, Any]:
+    """Read the YAML config, load .env into the environment, apply overrides.
+
+    Layers, later wins: config.yaml < config.local.yaml < profiles/<profile>.yaml < overrides."""
     load_dotenv(ROOT / ".env")
     path = Path(path) if path else DEFAULT_CONFIG
     with open(path) as f:
@@ -32,6 +36,14 @@ def load_config(path: str | Path | None = None, overrides: dict | None = None) -
     if path == DEFAULT_CONFIG and LOCAL_CONFIG.exists():
         with open(LOCAL_CONFIG) as f:
             cfg = deep_merge(cfg, yaml.safe_load(f) or {})
+    if profile:
+        pf = Path(profile) if Path(profile).suffix else PROFILES_DIR / f"{profile}.yaml"
+        if not pf.exists():
+            known = sorted(p.stem for p in PROFILES_DIR.glob("*.yaml"))
+            raise FileNotFoundError(f"no profile {profile!r} ({pf}); available: {known}")
+        with open(pf) as f:
+            cfg = deep_merge(cfg, yaml.safe_load(f) or {})
+        cfg["profile"] = pf.stem
     if overrides:
         cfg = deep_merge(cfg, {k: v for k, v in overrides.items() if v is not None})
     # resolve relative paths against the repo root

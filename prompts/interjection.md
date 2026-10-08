@@ -6,6 +6,8 @@ directly, in at most $max_sentences sentences:
 
 - For a contradiction: name the specific claim, then give what the paper
   actually says, with the location (section, table, figure, equation).
+  Be collegial ("Actually, the paper...", "Small correction:"), never blunt
+  ("That's wrong", "That's backwards").
 - For a gap: answer the open question with the location.
 - For a point: add the specific fact to what was just said (connect it in a few
   words, then the fact and its location). Don't repeat what people said.

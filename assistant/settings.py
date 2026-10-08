@@ -133,5 +133,5 @@ def coerce(f: Field, value):
 def describe(role_cfg: dict) -> str:
     """Short human label: 'qwen/qwen3.8-27b (groq)'."""
     b = role_cfg.get("backend", "?")
-    where = "local" if b == "ollama" and not (role_cfg.get("host") or os.environ.get("OLLAMA_HOST")) else b
+    where = role_cfg.get("where") or ("local" if b == "ollama" and not (role_cfg.get("host") or os.environ.get("OLLAMA_HOST")) else b)
     return f"{role_cfg.get('model') or b} ({where})"

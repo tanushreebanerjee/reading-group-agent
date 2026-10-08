@@ -59,6 +59,59 @@ The laptop joins the room's Zoom call as a separate participant.
    laptop so the keyboard shortcuts work: **R** reveals a raised hand,
    **D** dismisses it.
 
+## Meeting day: recommended setup
+
+Discuss mode (answers when asked, plus raised hands for corrections, unanswered
+questions and points that add to the current topic), the best models we can run
+(Qwen3.8 27B on a Nexus GPU with the whole paper in context), and Sherlock speaking
+its answers and any hand you reveal. All of it comes from one flag, `--profile nexus`
+(`profiles/nexus.yaml`). If Nexus is unreachable, each model falls back to Groq, then
+the local one, automatically.
+
+One-time: BlackHole 2ch and 16ch (`brew install blackhole-2ch blackhole-16ch`, then
+`sudo killall coreaudiod`), `GROQ_API_KEY` in `.env`, and one run of `scripts/nexus_up.sh`
+(installs Ollama and the model in your Nexus scratch).
+
+**Before the meeting (about 10 minutes)**
+
+```bash
+cd ~/Desktop/reading-group-agent && conda activate rga
+python -m prep papers/<paper>.pdf          # the day before: briefs/<paper>/brief.md
+# connect the UMD VPN, then:
+scripts/nexus_up.sh                        # one Duo approval; wait for "ready"
+```
+
+In Zoom on the laptop (joined as "Reading Group Assistant"), Settings → Audio:
+**Speaker: BlackHole 2ch** (or a Multi-Output Device with your headphones),
+**Microphone: BlackHole 16ch**, unmuted; turn off "Automatically adjust microphone
+volume" and set background noise suppression to Low.
+
+```bash
+python -m assistant --paper papers/<paper>.pdf --profile nexus
+```
+
+Wait for "model warm" (×3), "[voice] ready" and "listening on BlackHole 2ch". Screen-share
+the display at http://127.0.0.1:8765; keep http://127.0.0.1:8765/control open on the
+laptop only (it should show `qwen3.8:27b (nexus)` for all three models).
+
+**During:** "Sherlock, ..." then pause: the answer is shown and spoken. A ✋ shows only
+its type (contradiction, gap, point); **Reveal** (R, or the button on /control) shows and
+speaks it, starting with what it responds to ("Earlier, someone said: ..."). **D**
+dismisses, **S** stops speech. Points nobody reveals lower themselves after 2 minutes.
+
+**After:** Ctrl-C (writes `meetings/<date>/log.md`), then `scripts/nexus_down.sh` to free
+the GPU. Fill in `helpful: yes/no` in the log and run `python -m log.tune meetings/`.
+
+**Trying it on the laptop alone** (laptop mic and speakers, no Zoom):
+
+```bash
+python -m assistant --paper papers/GLD.pdf --profile nexus \
+  --set 'audio_device="MacBook Air Microphone"' --set voice.output_device=default
+```
+
+Zoom never plays your own voice back to you, so to test the Zoom path alone, join the
+meeting from your phone as well and talk into the phone.
+
 ## Running
 
 ```bash
@@ -73,8 +126,10 @@ python -m audio                                # live from BlackHole, Ctrl-C to 
 python -m audio --replay meeting.wav --speed 4
 
 # 3. the assistant (display at http://127.0.0.1:8765)
-python -m assistant --paper papers/paper.pdf --mode ask
+python -m assistant --paper papers/paper.pdf --profile nexus   # recommended (above)
+python -m assistant --paper papers/paper.pdf --mode ask        # zero-cost defaults: local + Groq
 python -m assistant --paper papers/paper.pdf --mode engaged
+python -m assistant --paper papers/paper.pdf --mode discuss
 python -m assistant --paper papers/paper.pdf --replay tests/fixtures/synthetic.wav --speed 4
 
 # 4. after the meeting: fill in the helpful: yes/no fields in meetings/<date>/log.md, then
@@ -177,11 +232,8 @@ scripts/nexus_up.sh        # one Duo prompt; submits the GPU job, waits, opens t
 scripts/nexus_up.sh --check
 ```
 
-Then pick **Nexus · Qwen3.8 27B, whole paper** for the answer and hand-checker models on the control
-page, or make it the default in `config.local.yaml` by copying that preset from
-`config.yaml` under `llm: answer:` and `llm: trigger:`. If the VPN or tunnel drops, calls fail
-within 20 s and fall through to Groq, then the local model; re-run `scripts/nexus_up.sh` to
-reattach (it reuses the running job). After the meeting, free the GPU:
+Then start the assistant with `--profile nexus` (see Meeting day), or pick
+**Nexus · Qwen3.8 27B, whole paper** for individual models on the control page.
 
 ```bash
 scripts/nexus_down.sh
