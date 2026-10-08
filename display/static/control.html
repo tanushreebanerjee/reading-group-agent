@@ -59,6 +59,14 @@
     </div>
   </section>
 
+  <section id="share" style="display:none">
+    <h2>Shared link</h2>
+    <div class="hand"><code id="share-url" style="word-break:break-all"></code>
+      <button id="copy">Copy</button></div>
+    <p class="note">Paste it in the Zoom chat. Anyone with it sees the display and can Reveal or
+      Dismiss; it can't open this page. It stops working when Sherlock stops.</p>
+  </section>
+
   <section>
     <h2>Raised hand</h2>
     <div class="hand">
@@ -107,6 +115,7 @@ function handle(m) {
     $("hand").innerHTML = on ? `<b>${m.trigger}</b>${m.count > 1 ? ` (+${m.count - 1} more)` : ""}` : "none";
     $("reveal").disabled = $("dismiss").disabled = !on;
   } else if (m.type === "settings") {
+    if (m.share_url) { $("share").style.display = ""; $("share-url").textContent = m.share_url; }
     renderFields(m.fields);
     $("error").style.display = m.error ? "block" : "none";
     $("error").textContent = m.error || "";
@@ -165,6 +174,7 @@ function flash(key) {
 $("reveal").onclick = () => send({action: "reveal"});
 $("dismiss").onclick = () => send({action: "dismiss"});
 $("stop").onclick = () => send({action: "stop_speaking"});
+$("copy").onclick = () => navigator.clipboard.writeText($("share-url").textContent);
 connect();
 </script>
 </body>

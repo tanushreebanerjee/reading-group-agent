@@ -21,8 +21,10 @@ from pathlib import Path
 from typing import Awaitable, Callable
 from urllib.parse import urlparse
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+import hmac
+
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse, PlainTextResponse
 
 STATIC = Path(__file__).resolve().parent / "static"
 
@@ -76,20 +78,48 @@ def origin_ok(origin: str | None) -> bool:
     return origin is None or urlparse(origin).hostname in LOCAL_HOSTS
 
 
-def create_app(hub: Hub) -> FastAPI:
+# Tunnels (cloudflared, localhost.run) add one of these; a direct local request has none.
+FORWARD_HEADERS = ("x-forwarded-for", "cf-connecting-ip", "x-real-ip", "forwarded")
+# What a shared-link viewer may do: reveal/dismiss hands and stop speech, never change settings.
+VIEWER_ACTIONS = ("reveal", "dismiss", "stop_speaking")
+LOCAL_ACTIONS = VIEWER_ACTIONS + ("set",)
+
+
+def is_external(headers) -> bool:
+    return any(h in headers for h in FORWARD_HEADERS)
+
+
+def key_ok(given: str | None, share_key: str | None) -> bool:
+    return bool(share_key) and given is not None and hmac.compare_digest(given, share_key)
+
+
+def create_app(hub: Hub, share_key: str | None = None) -> FastAPI:
+    """share_key: when the display is shared through a tunnel, requests that came through it
+    must carry ?k=<share_key>; they get the display (with Reveal/Dismiss) but never /control."""
     app = FastAPI()
+    denied = PlainTextResponse("This link is missing its key or has expired.", status_code=403)
 
     @app.get("/")
-    async def index():
+    async def index(request: Request):
+        if is_external(request.headers) and not key_ok(request.query_params.get("k"), share_key):
+            return denied
         return HTMLResponse((STATIC / "index.html").read_text())
 
     @app.get("/control")
-    async def control():
+    async def control(request: Request):
+        if is_external(request.headers):   # settings stay on the laptop
+            return PlainTextResponse("The control page is only available on the assistant's laptop.", status_code=403)
         return HTMLResponse((STATIC / "control.html").read_text())
 
     @app.websocket("/ws")
     async def ws_endpoint(ws: WebSocket):
-        trusted = origin_ok(ws.headers.get("origin"))
+        if is_external(ws.headers):
+            if not key_ok(ws.query_params.get("k"), share_key):
+                await ws.close(code=1008)
+                return
+            allowed = VIEWER_ACTIONS
+        else:
+            allowed = LOCAL_ACTIONS if origin_ok(ws.headers.get("origin")) else ()
         await hub.connect(ws)
         try:
             while True:
@@ -98,8 +128,7 @@ def create_app(hub: Hub) -> FastAPI:
                     msg = json.loads(raw)
                 except json.JSONDecodeError:
                     continue
-                if (trusted and isinstance(msg, dict) and msg.get("action") in ("reveal", "dismiss", "set", "stop_speaking")
-                        and hub.on_action):
+                if isinstance(msg, dict) and msg.get("action") in allowed and hub.on_action:
                     await hub.on_action(msg)
         except WebSocketDisconnect:
             pass
@@ -109,10 +138,10 @@ def create_app(hub: Hub) -> FastAPI:
     return app
 
 
-async def serve(hub: Hub, host: str, port: int) -> asyncio.Task:
+async def serve(hub: Hub, host: str, port: int, share_key: str | None = None) -> asyncio.Task:
     import uvicorn
 
-    config = uvicorn.Config(create_app(hub), host=host, port=port, log_level="warning", lifespan="off")
+    config = uvicorn.Config(create_app(hub, share_key), host=host, port=port, log_level="warning", lifespan="off")
     server = uvicorn.Server(config)
     server.install_signal_handlers = lambda: None  # the app handles Ctrl-C itself
     task = asyncio.create_task(server.serve())

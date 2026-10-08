@@ -157,6 +157,14 @@ See README. Phase 0: `python -m audio --list-devices`, `pytest -q`,
 ## Known issues
 
 Added 2026-10-07 (evening):
+- Nexus model is qwen3:32b. qwen3.8:27b is a hybrid/recurrent model: llama.cpp can't reuse
+  its cached prefix when request types alternate, so it re-read the ~25k-token paper (~25 s)
+  on many requests. qwen3:32b (dense) matched its accuracy (10/11) at ~0.5 s first words.
+- `--share`: Cloudflare quick tunnel + secret key in the link; viewers can reveal/dismiss/stop
+  speech, never change settings or open /control. Tested end to end (403 without the key, 200
+  with it, live updates over wss, link dead after exit). localhost.run's TLS failed in testing.
+  A new link's address took ~80 s to resolve here.
+- `default_profile: nexus` in config.local.yaml makes the plain command use the Nexus profile.
 - Groq free tier also caps each model at 200k tokens/day (rolling). Fine for a meeting's
   answers, not for heavy testing on the same day; the chain falls to gpt-oss-120b, then local.
 - `--profile nexus` (profiles/nexus.yaml) is the recommended meeting setup: discuss mode,

@@ -71,7 +71,8 @@ const $ = id => document.getElementById(id);
 let ws, answerId = null;
 
 function connect() {
-  ws = new WebSocket(`ws://${location.host}/ws`);
+  // keep the share key (?k=...) from the page URL; wss when opened through an https tunnel
+  ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws${location.search}`);
   ws.onopen = () => { $("listening").textContent = "connected"; };
   ws.onclose = () => { $("dot").className = "dot"; $("listening").textContent = "disconnected, retrying"; setTimeout(connect, 1500); };
   ws.onmessage = ev => handle(JSON.parse(ev.data));
@@ -117,6 +118,7 @@ function handle(m) {
     case "hand_raised":
     case "hand_cleared": {
       const h = $("hand");
+      handId = m.count > 0 ? m.id : null;
       if (m.count > 0) {
         h.className = "on " + (m.trigger || "");
         $("hand-type").textContent = m.trigger || "";
@@ -135,7 +137,9 @@ function handle(m) {
   }
 }
 
-function act(action) { if (ws && ws.readyState === 1) ws.send(JSON.stringify({action})); }
+// name the hand being acted on, so two people pressing Reveal at once can't reveal two hands
+let handId = null;
+function act(action) { if (ws && ws.readyState === 1) ws.send(JSON.stringify({action, id: handId})); }
 $("reveal").onclick = () => act("reveal");
 $("dismiss").onclick = () => act("dismiss");
 document.addEventListener("keydown", e => {

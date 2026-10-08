@@ -28,6 +28,8 @@ def parse_args(argv=None):
     ap.add_argument("--hold", type=float, default=None,
                     help="replay: seconds to keep running after the recording ends (default 10)")
     ap.add_argument("--port", type=int, default=None)
+    ap.add_argument("--share", action="store_true",
+                    help="share the display through a free public tunnel: paste the printed link in the Zoom chat")
     ap.add_argument("--set", action="append", default=[], metavar="KEY=VALUE",
                     help="override any config value, e.g. --set trigger.cooldown_s=60")
     return ap.parse_args(argv)
@@ -38,6 +40,8 @@ def main(argv=None):
     overrides = {"mode": args.mode}
     if args.port:
         overrides["display"] = {"port": args.port}
+    if args.share:
+        overrides.setdefault("display", {})["share"] = True
     import yaml
 
     for item in args.set:

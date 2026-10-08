@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import secrets
 import sys
 import threading
 import time
@@ -114,7 +115,8 @@ class App:
                              "source": "replay" if getattr(self.source, "path", None) else "live",
                              "heard": len(self.store.segments), "audio_ok": self.audio_ok,
                              "device": self.cfg.get("audio_device"), "models": self.models_in_use(),
-                             "voice": self.voice_mode(), "speaking": self.speaking})
+                             "voice": self.voice_mode(), "speaking": self.speaking,
+                             "shared": bool(getattr(self, "share_url", None))})
 
     def models_in_use(self) -> dict:
         def show(role, llm):
@@ -345,6 +347,9 @@ class App:
             return
         if action not in ("reveal", "dismiss"):
             return
+        head = self.hands.head()
+        if msg.get("id") and head and msg["id"] != head.id:
+            return   # someone else already acted on that hand: don't touch the next one
         status = {"reveal": "revealed", "dismiss": "dismissed"}[action]
         h = self.hands.resolve(status, self.now)
         if not h:
@@ -417,6 +422,7 @@ class App:
 
     async def send_settings(self, error: str | None = None) -> None:
         msg = self.settings_state()
+        msg["share_url"] = getattr(self, "share_url", None)
         if error:
             msg["error"] = error
         await self.hub.send(msg)
@@ -524,7 +530,10 @@ class App:
 
     async def run(self) -> None:
         d = self.cfg["display"]
-        server = await serve(self.hub, d["host"], int(d["port"]))
+        share_key = secrets.token_urlsafe(9) if d.get("share") else None
+        server = await serve(self.hub, d["host"], int(d["port"]), share_key=share_key)
+        if share_key:
+            await self.start_share(int(d["port"]), share_key, d.get("share_method", "auto"))
         log(f"[assistant] display at http://{d['host']}:{d['port']}  mode={self.mode}  meeting={self.meeting_dir}")
         self.events.write("meeting_start", mode=self.mode, source=str(getattr(self.source, "path", "live")),
                           paper=self.paper.title if self.paper else None, brief=self.brief_path,
@@ -569,7 +578,24 @@ class App:
             server.server.should_exit = True
             await asyncio.gather(server, return_exceptions=True)
 
+    async def start_share(self, port: int, key: str, method: str) -> None:
+        from display.share import start_tunnel
+
+        try:
+            self.tunnel, base = await start_tunnel(port, method)
+        except RuntimeError as e:
+            log(f"[share] {e}. Screen-share the display instead, or: brew install cloudflared")
+            return
+        self.share_url = f"{base}/?k={key}"
+        log(f"[share] paste this link in the Zoom chat (display with Reveal/Dismiss; it can take about a minute to start "
+            f"working and ends when Sherlock stops):\n"
+            f"        {self.share_url}")
+        self.events.write("share", t=round(self.now, 2), base=base)   # the key itself is not logged
+        await self.send_settings()
+
     async def finish(self) -> None:
+        if getattr(self, "tunnel", None) and self.tunnel.returncode is None:
+            self.tunnel.terminate()
         if self.speaker:
             await asyncio.to_thread(self.speaker.stop)
         for h in self.hands.close(self.now):

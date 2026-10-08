@@ -68,8 +68,8 @@ its answers and any hand you reveal. All of it comes from one flag, `--profile n
 (`profiles/nexus.yaml`). If Nexus is unreachable, each model falls back to Groq, then
 the local one, automatically.
 
-One-time: BlackHole 2ch and 16ch (`brew install blackhole-2ch blackhole-16ch`, then
-`sudo killall coreaudiod`), `GROQ_API_KEY` in `.env`, and one run of `scripts/nexus_up.sh`
+One-time: BlackHole 2ch and 16ch (`brew install blackhole-2ch blackhole-16ch`, or the
+installers from https://existential.audio/blackhole/, then `sudo killall coreaudiod`), `GROQ_API_KEY` in `.env`, and one run of `scripts/nexus_up.sh`
 (installs Ollama and the model in your Nexus scratch).
 
 **Before the meeting (about 10 minutes)**
@@ -93,6 +93,14 @@ python -m assistant --paper papers/<paper>.pdf --profile nexus
 Wait for "model warm" (×3), "[voice] ready" and "listening on BlackHole 2ch". Screen-share
 the display at http://127.0.0.1:8765; keep http://127.0.0.1:8765/control open on the
 laptop only (it should show `qwen3:32b (nexus)` for all three models).
+
+**Instead of screen-sharing**, add `--share`: Sherlock prints a link (also shown on /control
+with a Copy button) to paste in the Zoom chat. Everyone, in the room or remote, opens the live
+display in their own browser and can Reveal or Dismiss hands. The link has a secret key (without
+it the page is refused), it can't open /control, and it stops working when Sherlock stops. It
+goes through a free Cloudflare tunnel (cloudflared is downloaded to `~/.cache/rga/` the first
+time) and can take about a minute to start working. Anyone with the link sees Sherlock's
+answers and revealed hands (not the transcript).
 
 **During:** "Sherlock, ..." then pause: the answer is shown and spoken. A ✋ shows only
 its type (contradiction, gap, point); **Reveal** (R, or the button on /control) shows and

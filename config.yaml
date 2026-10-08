@@ -195,6 +195,8 @@ trigger:
 display:
   host: 127.0.0.1
   port: 8765
+  share: false              # --share: public link to the display (secret key in the URL), for the Zoom chat
+  share_method: auto        # auto = cloudflared (downloaded to ~/.cache/rga on first use) | localhost.run
 
 prep:
   max_words: 900          # brief length limit (about 2 pages)
