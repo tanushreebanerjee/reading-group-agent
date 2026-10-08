@@ -187,6 +187,10 @@ python tests/loopback_check.py             # live path: plays the WAV into Black
 `papers/test.pdf` with two questions addressed to Sherlock, one wrong claim,
 and one unanswered factual question.
 
+Model comparison on questions the brief doesn't cover (`tests/fixtures/qa_out_of_brief.yaml`):
+`python tests/qa_eval.py [--models nexus nexus-excerpts groq local]`. Last run: Nexus with the
+whole paper 10/11, Nexus with excerpts 8/11, local 7B 6/11.
+
 ## Live controls
 
 Open `http://127.0.0.1:8765/control` on the laptop (don't screen-share it). It shows

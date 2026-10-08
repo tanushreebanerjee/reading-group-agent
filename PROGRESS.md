@@ -15,6 +15,9 @@ Re-read this when resuming work. Plan: Phases 0–5 from `CLAUDE.md`.
 | 3 latency, with Groq | target met | `tests/e2e_check.py --phase 3 --max-latency 5` with answers on Groq (qwen/qwen3.8-27b): first words 0.8–0.9 s after the question in replay. Live on the laptop mic: 4–7 s total, of which Whisper (CPU) is 4–7 s |
 | 5 rerun with Groq | not yet passing | first rerun failed on two bugs since fixed (trigger checks ran while a question to Sherlock was open; long 429 waits fell back too slowly); rerun pending |
 | 6 Voice (early) | built, tested in replay | Kokoro TTS on the Apple GPU (MLX), ~1 s to first audio; spoken into `voice.output_device`; listening paused while speaking; stop control. Not yet tested through Zoom (needs BlackHole 16ch) |
+| 5 on Nexus (engaged) | done | `tests/e2e_check.py --phase 5` with hands on Nexus (qwen3.8:27b, whole paper): contradiction 0.95 with exact quote, gap hand 12 s after the stalled question (was 86 s on the local 7B), 0 false hands, answers 2.2–2.8 s |
+| Discuss mode | done | `tests/e2e_check.py --phase 5 --discuss`: planted point (Table 15 inference cost) raised 7 s after the cue with correct facts; corrections/gaps not delayed by points; 1 unplanned but relevant point |
+| Out-of-brief QA | done | `tests/qa_eval.py`, 11 questions answered only in the paper: Nexus whole paper 10/11 (1.6 s median first words), Nexus with 3 excerpts 8/11, local 7B 6/11 (9.7 s). Groq not measurable: the free tier's 200k tokens/day per model was used up by testing (2/2 correct before that) |
 
 ## Environment (dev machine)
 
@@ -154,6 +157,13 @@ See README. Phase 0: `python -m audio --list-devices`, `pytest -q`,
 ## Known issues
 
 Added 2026-10-07 (evening):
+- Groq free tier also caps each model at 200k tokens/day (rolling). Fine for a meeting's
+  answers, not for heavy testing on the same day; the chain falls to gpt-oss-120b, then local.
+- `--profile nexus` (profiles/nexus.yaml) is the recommended meeting setup: discuss mode,
+  every role on Nexus with the whole paper, Parakeet STT on the Apple GPU, spoken answers
+  and hands, Nexus summary with thinking (~50 s after Ctrl-C).
+- Parakeet takes no prompt, so attendee names and paper terms can't be primed as with Whisper.
+- The Nexus summary sometimes attributes paper facts to "the brief".
 - Groq free tier per model: 1000 requests/day, ~8k input and 1000 output tokens/min.
   Answers fall through Qwen 27B -> gpt-oss-120b -> local qwen2.5:7b on rate limits,
   errors, or empty answers. Thinking mode used ~500+ output tokens per answer and went
