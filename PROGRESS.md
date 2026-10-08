@@ -12,6 +12,9 @@ Re-read this when resuming work. Plan: Phases 0–5 from `CLAUDE.md`.
 | 3 Ask + display | done, latency target missed locally | `tests/e2e_check.py --phase 3`: both questions answered correctly with citations, streamed to the display, no spurious answers. First words 8–13 s after the question locally; the ~5 s target needs a GPU backend (see Known issues) |
 | 4 Meeting log | done | after each run `meetings/<dir>/log.md` has the summary, every answer, every hand (revealed/dismissed/ignored), and every suppressed trigger, each with ±45 s transcript context, a machine marker, and a blank `helpful:` line; `tests/test_log.py` round-trips labels through `log.tune` |
 | 5 Engaged mode | done | `tests/e2e_check.py --phase 5` (real time): contradiction hand raised 28 s after the wrong claim with the exact quote and a correct §4.3/Table 2 correction; the stalled source-views gap raised with the right answer (N=2); 0 false hands; reveal/dismiss/ignored all logged; `tests/label_synthetic.py` + `python -m log.tune` print precision per type/threshold. Answer latency still over target (see Known issues) |
+| 3 latency, with Groq | target met | `tests/e2e_check.py --phase 3 --max-latency 5` with answers on Groq (qwen/qwen3.8-27b): first words 0.8–0.9 s after the question in replay. Live on the laptop mic: 4–7 s total, of which Whisper (CPU) is 4–7 s |
+| 5 rerun with Groq | not yet passing | first rerun failed on two bugs since fixed (trigger checks ran while a question to Sherlock was open; long 429 waits fell back too slowly); rerun pending |
+| 6 Voice (early) | built, tested in replay | Kokoro TTS on the Apple GPU (MLX), ~1 s to first audio; spoken into `voice.output_device`; listening paused while speaking; stop control. Not yet tested through Zoom (needs BlackHole 16ch) |
 
 ## Environment (dev machine)
 
@@ -149,6 +152,25 @@ See README. Phase 0: `python -m audio --list-devices`, `pytest -q`,
 `python tests/fixtures/make_synthetic.py`.
 
 ## Known issues
+
+Added 2026-10-07 (evening):
+- Groq free tier per model: 1000 requests/day, ~8k input and 1000 output tokens/min.
+  Answers fall through Qwen 27B -> gpt-oss-120b -> local qwen2.5:7b on rate limits,
+  errors, or empty answers. Thinking mode used ~500+ output tokens per answer and went
+  blank on open-ended questions (all tokens spent thinking), so it is not the default.
+- Live speech-to-text lag is now the largest delay (4–7 s from end of question to
+  detection, Whisper small.en on CPU). Whisper on a Nexus GPU would cut it (needs audio
+  over the tunnel; not built).
+- Nexus GPU backend (scripts/nexus_up.sh, nexus_down.sh): needs UMD VPN and one Duo
+  approval per run. Defaults: vulcan-zwicker / vulcan-ampere / vulcan-default / one
+  RTX A6000 / qwen3.8:27b with the whole paper in context (32k). First end-to-end test
+  in progress. The Ollama server listens on the node's cluster address while the job runs.
+- Raised hands on the local 7B model are slow (10–20 s per check) and coarse; meant to
+  move to Nexus with the whole paper in context.
+- Spoken answers pause transcription while Sherlock speaks, so speech during that time
+  is not transcribed.
+- `.env` now holds several real API keys, and the repo is in iCloud-synced ~/Desktop.
+- `claude -p` never receives ANTHROPIC_API_KEY (would bill the API instead of the login).
 
 - The synthetic `say` voice pronounces "VAE" so Whisper writes "V"; this is a
   TTS artifact, and real speech should be fine (vocabulary priming is on).
