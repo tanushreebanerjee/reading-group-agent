@@ -11,7 +11,7 @@ from assistant.hands import Hand, HandQueue
 from assistant.names import NameDetector
 from assistant.questions import Question, QuestionCollector
 from assistant.triggers import Gate, TriggerChecker
-from core.llm import make_llm
+from core.llm import make_llm, same_resource
 from core.paper import Paper
 from core.transcript import Segment, TranscriptStore, format_segments
 from display.server import Hub, serve
@@ -52,7 +52,12 @@ class App:
         self.gate = Gate(t.get("thresholds", {}), float(t.get("cooldown_s", 180)), float(t.get("dedup_ratio", 70)))
         self.hands = HandQueue()
 
-        self.llm_lock = asyncio.Lock()     # one LLM call at a time (Ollama serializes anyway)
+        # One call at a time per backend: roles on the same local Ollama share a lock (it
+        # serializes anyway, and answers must not queue behind a trigger check); a role on a
+        # cloud API gets its own, so a local trigger check never delays a cloud answer.
+        self.shared_llm = same_resource(cfg["llm"]["answer"], cfg["llm"]["trigger"])
+        self.answer_lock = asyncio.Lock()
+        self.trigger_lock = self.answer_lock if self.shared_llm else asyncio.Lock()
         self.answering = 0
         self.n_answers = 0
         self.n_triggers = 0
@@ -138,7 +143,7 @@ class App:
             async def on_delta(piece: str):
                 await self.hub.send({"type": "answer_delta", "id": aid, "text": piece})
 
-            async with self.llm_lock:
+            async with self.answer_lock:
                 res = await self.answerer.answer(question, self.recent_transcript(
                     float(self.cfg["answer"].get("transcript_window_s", 90))), on_delta)
         finally:
@@ -158,7 +163,8 @@ class App:
                           q_end=q.end, detected_t=round(detected_t, 2), text=res.text, latency_s=round(e2e, 2),
                           first_words_s=first_words and round(first_words, 2),
                           llm_s=round(res.latency_s, 2), first_token_s=res.first_token_s and round(res.first_token_s, 2),
-                          cited=res.cited, sources=res.sources)
+                          cited=res.cited, sources=res.sources,
+                          served_by=repr(getattr(self.answer_llm, "last_used", self.answer_llm)))
         log(f"    -> {aid} (first words {first_words or -1:.1f}s / complete {e2e:.1f}s after question end, llm {res.latency_s:.1f}s"
             f"{'' if res.cited else ', NO CITATION'}): {res.text}")
 
@@ -174,7 +180,7 @@ class App:
             next_t = self.now + interval
             if len(self.store.segments) == last_seen:
                 continue  # nothing new was said
-            if self.answering or self.collector.collecting or self.llm_lock.locked():
+            if self.shared_llm and (self.answering or self.collector.collecting or self.answer_lock.locked()):
                 self.events.write("trigger_skip", t=round(self.now, 2), why="busy")
                 next_t = self.now + 2.0  # retry shortly instead of losing a whole interval
                 continue
@@ -182,7 +188,7 @@ class App:
             transcript = self.recent_transcript(window)
             name = self.cfg.get("assistant_name", "Sherlock")
             human = [s.text for s in self.store.window(self.now, window) if s.speaker != name]
-            async with self.llm_lock:
+            async with self.trigger_lock:
                 t0 = time.monotonic()
                 r = await asyncio.to_thread(self.checker.check, transcript, self.gate.raised_reasons)
                 took = time.monotonic() - t0
@@ -207,7 +213,7 @@ class App:
     async def raise_hand(self, tid: str, r, now: float, transcript: str) -> None:
         hid = f"H{len(self.hands.hands) + 1}"
         # prepare the interjection now so Reveal is instant; it is not shown until revealed
-        async with self.llm_lock:
+        async with self.answer_lock:
             # retrieve with the person's words plus the checker's short reason (which names the topic)
             res = await self.answerer.run("interjection", f"{r.quote} {r.reason}", transcript, trigger=r.trigger,
                                           reason=f'"{r.quote}" ({r.reason})', max_sentences=2)

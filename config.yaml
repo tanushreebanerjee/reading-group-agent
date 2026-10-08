@@ -40,6 +40,23 @@ llm:
     keep_alive: 30m
     temperature: 0.2
     max_tokens: 200
+  # Optional, free, faster: answers on Groq's cloud API, falling back to local Ollama
+  # if the key is missing, the API errors, or the free-tier limit is hit. This sends
+  # the recent transcript to Groq, so get the group's OK first. Put it in the
+  # gitignored config.local.yaml (and GROQ_API_KEY in .env) rather than here:
+  #
+  #   llm:
+  #     answer:
+  #       backend: groq
+  #       model: llama-3.3-70b-versatile
+  #       max_tokens: 200
+  #       temperature: 0.2
+  #       timeout_s: 20
+  #       retry_after_s: 60      # after a failure, use the fallback this long
+  #       fallback: {backend: ollama, model: qwen2.5:7b, num_ctx: 8192, keep_alive: 30m}
+  #
+  # Triggers stay local by default: they run ~4 times a minute with ~2-3k tokens
+  # each, which exceeds Groq's free daily token cap for the large models within an hour.
   # Roles that share a model must use the same num_ctx, or Ollama reloads the
   # model whenever they alternate.
   trigger:

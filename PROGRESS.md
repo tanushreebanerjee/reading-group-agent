@@ -168,6 +168,12 @@ See README. Phase 0: `python -m audio --list-devices`, `pytest -q`,
   also allows a larger model (e.g. qwen2.5:32b). Still to do: an sbatch
   script and automatic fallback to the local model if the tunnel drops.
   Needs the user's Nexus account, partition, and QOS.
+  Interim free option (built, waiting on a key): `backend: groq` for answers
+  with `fallback:` to local Ollama (see README, Configuration). Tested with no
+  key: both phase-3 answers fell back to Ollama and passed. Not yet measured
+  against the real Groq API. Answers and triggers now take separate locks when
+  they run on different backends, so a local trigger check never delays a
+  cloud answer.
 - Memory: with qwen2.5:7b + 3b both loaded, free memory dropped to 18% and
   prefill slowed about 2×. Keep only one model resident on the 16 GB Air.
 

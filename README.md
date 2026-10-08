@@ -37,8 +37,8 @@ See `PROGRESS.md` for build status and known issues.
    python -m audio --list-devices      # should show "BlackHole 2ch  <-- configured input"
    ```
 5. **Keys (optional).** Copy any keys into `.env` (never commit it). The
-   default config needs none of them: `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`,
-   `OPENAI_API_KEY`, `DEEPGRAM_API_KEY`, `OLLAMA_HOST`.
+   default config needs none of them: `GROQ_API_KEY`, `GEMINI_API_KEY`,
+   `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `DEEPGRAM_API_KEY`, `OLLAMA_HOST`.
 
 The first speech-to-text run downloads the Whisper model (`small.en`,
 about 500 MB) into the Hugging Face cache.
@@ -143,9 +143,30 @@ backends are set separately for `prep`, `answer`, `trigger`, and `summary`:
 |---|---|
 | `ollama` | local; default for answer/trigger/summary |
 | `claude-cli` | `claude -p` on your Claude Code login; default for prep; too slow for triggers |
+| `groq` | free tier, fast; needs `GROQ_API_KEY` (console.groq.com). Sends the transcript to Groq |
+| `cerebras`, `openrouter` | free tiers, same OpenAI-style API; `CEREBRAS_API_KEY` / `OPENROUTER_API_KEY` (untested) |
 | `gemini` | free tier, needs `GEMINI_API_KEY` (untested) |
-| `anthropic`, `openai` | paid, for later (untested) |
+| `anthropic`, `openai` | paid, for later (untested). `openai` also takes `base_url` and `api_key_env` for any OpenAI-compatible server |
 | `fake` | canned responses for tests |
+
+Any role can have a `fallback:` backend that takes over when the primary
+fails (missing key, network error, rate limit); the primary is retried after
+`retry_after_s`. Example: fast free answers on Groq that fall back to local
+Ollama. Put this in `config.local.yaml` and `GROQ_API_KEY=...` in `.env`, and
+get the group's OK first, since the recent transcript goes to Groq:
+
+```yaml
+llm:
+  answer:
+    backend: groq
+    model: llama-3.3-70b-versatile
+    timeout_s: 20
+    fallback: {backend: ollama, model: qwen2.5:7b, num_ctx: 8192, keep_alive: 30m}
+```
+
+Keep `trigger` local: it runs ~4 times a minute and would hit Groq's free
+daily token cap within about an hour. Each answer's `served_by` field in
+`events.jsonl` records which backend actually answered.
 
 To use a large cloud model for answers, also set `answer.context: full_paper`.
 This sends the whole paper instead of retrieved snippets.

@@ -180,26 +180,128 @@ class AnthropicLLM(LLM):
 
 
 class OpenAILLM(LLM):
-    """Paid API, for later. UNTESTED in the first pass."""
+    """OpenAI-compatible chat completions: OpenAI itself, or any server with the same API
+    (Groq, Cerebras, OpenRouter, a vLLM box) via `base_url` and `api_key_env`.
+
+    The presets below fill in base_url and api_key_env for known providers, so
+    `backend: groq` is shorthand for `backend: openai` pointed at Groq.
+    """
 
     name = "openai"
+    PRESETS = {
+        "openai": ("https://api.openai.com/v1", "OPENAI_API_KEY"),
+        "groq": ("https://api.groq.com/openai/v1", "GROQ_API_KEY"),
+        "cerebras": ("https://api.cerebras.ai/v1", "CEREBRAS_API_KEY"),
+        "openrouter": ("https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"),
+    }
 
-    def complete(self, system, user, *, json_mode=False, max_tokens=None, temperature=None):
-        key = _require_env("OPENAI_API_KEY")
+    def __init__(self, cfg: dict):
+        super().__init__(cfg)
+        preset = cfg.get("backend", "openai")
+        base_url, key_env = self.PRESETS.get(preset, self.PRESETS["openai"])
+        self.name = preset if preset in self.PRESETS else "openai"
+        self.base_url = (cfg.get("base_url") or base_url).rstrip("/")
+        self.key_env = cfg.get("api_key_env") or key_env
+        self.timeout = float(cfg.get("timeout_s", 60))
+
+    def _request(self, system, user, json_mode, max_tokens, temperature, stream):
+        key = _require_env(self.key_env)
         mt, temp = self._params(max_tokens, temperature)
         body = {
             "model": self.model,
             "max_tokens": mt,
             "temperature": temp,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+            "stream": stream,
         }
         if json_mode:
             body["response_format"] = {"type": "json_object"}
-        r = requests.post("https://api.openai.com/v1/chat/completions",
-                          headers={"Authorization": f"Bearer {key}"}, json=body, timeout=120)
+        try:
+            r = requests.post(f"{self.base_url}/chat/completions", headers={"Authorization": f"Bearer {key}"},
+                              json=body, timeout=self.timeout, stream=stream)
+        except requests.RequestException as e:
+            raise LLMError(f"{self.name} ({self.model}): {e}") from e
         if r.status_code != 200:
-            raise LLMError(f"openai {r.status_code}: {r.text[:300]}")
-        return r.json()["choices"][0]["message"]["content"]
+            raise LLMError(f"{self.name} {r.status_code}: {r.text[:300]}")
+        return r
+
+    def complete(self, system, user, *, json_mode=False, max_tokens=None, temperature=None):
+        r = self._request(system, user, json_mode, max_tokens, temperature, stream=False)
+        return r.json()["choices"][0]["message"]["content"] or ""
+
+    def stream(self, system, user, *, json_mode=False, max_tokens=None, temperature=None):
+        r = self._request(system, user, json_mode, max_tokens, temperature, stream=True)
+        try:
+            for line in r.iter_lines(decode_unicode=True):
+                if not line or not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                if data == "[DONE]":
+                    break
+                choices = json.loads(data).get("choices") or [{}]
+                chunk = (choices[0].get("delta") or {}).get("content")
+                if chunk:
+                    yield chunk
+        except requests.RequestException as e:
+            raise LLMError(f"{self.name} ({self.model}): stream broke: {e}") from e
+
+
+class FallbackLLM(LLM):
+    """Try `primary`; on any backend error use `fallback` (e.g. Groq -> local Ollama).
+
+    After a failure the primary is skipped for `retry_after_s`, so a rate limit or an
+    outage costs one failed request, not one per call. A stream that fails after it
+    has started yielding text is not retried (the display already shows part of it).
+    """
+
+    name = "fallback"
+
+    def __init__(self, primary: LLM, fallback: LLM, retry_after_s: float = 60.0, clock=None, log=None):
+        super().__init__(primary.cfg)
+        self.primary, self.fallback = primary, fallback
+        self.retry_after_s = retry_after_s
+        self.clock = clock or __import__("time").monotonic
+        self.log = log or (lambda msg: print(msg, flush=True))
+        self.skip_until = 0.0
+        self.last_used: LLM = primary
+
+    def _use_primary(self) -> bool:
+        return self.clock() >= self.skip_until
+
+    def _failed(self, e: Exception) -> None:
+        self.skip_until = self.clock() + self.retry_after_s
+        self.log(f"[llm] {self.primary!r} failed ({e}); using {self.fallback!r} "
+                 f"for the next {self.retry_after_s:.0f}s")
+
+    def complete(self, system, user, **kw):
+        if self._use_primary():
+            try:
+                out = self.primary.complete(system, user, **kw)
+                self.last_used = self.primary
+                return out
+            except LLMError as e:
+                self._failed(e)
+        self.last_used = self.fallback
+        return self.fallback.complete(system, user, **kw)
+
+    def stream(self, system, user, **kw):
+        if self._use_primary():
+            started = False
+            try:
+                for piece in self.primary.stream(system, user, **kw):
+                    started = True
+                    self.last_used = self.primary
+                    yield piece
+                return
+            except LLMError as e:
+                if started:
+                    raise
+                self._failed(e)
+        self.last_used = self.fallback
+        yield from self.fallback.stream(system, user, **kw)
+
+    def __repr__(self):
+        return f"<{self.primary!r} -> {self.fallback!r}>"
 
 
 class FakeLLM(LLM):
@@ -234,12 +336,30 @@ BACKENDS = {
     "gemini": GeminiLLM,
     "anthropic": AnthropicLLM,
     "openai": OpenAILLM,
+    "groq": OpenAILLM,
+    "cerebras": OpenAILLM,
+    "openrouter": OpenAILLM,
     "fake": FakeLLM,
 }
 
 
+def same_resource(a: dict, b: dict) -> bool:
+    """True if two role configs run on the same local server (so their calls contend)."""
+    local = ("ollama",)
+    if a.get("backend") not in local or b.get("backend") not in local:
+        return False
+    return (a.get("host") or os.environ.get("OLLAMA_HOST")) == (b.get("host") or os.environ.get("OLLAMA_HOST"))
+
+
 def make_llm(cfg: dict) -> LLM:
+    """Build the backend for one role. If cfg has a `fallback` section (another role-style
+    config), wrap it so errors fall through to that backend, e.g. a free cloud API that
+    falls back to local Ollama when it is rate-limited, offline, or missing its key."""
     backend = cfg.get("backend")
     if backend not in BACKENDS:
         raise ValueError(f"unknown LLM backend {backend!r}; choose from {sorted(BACKENDS)}")
-    return BACKENDS[backend](cfg)
+    primary = BACKENDS[backend]({k: v for k, v in cfg.items() if k != "fallback"})
+    fb = cfg.get("fallback")
+    if not fb:
+        return primary
+    return FallbackLLM(primary, make_llm(fb), retry_after_s=float(cfg.get("retry_after_s", 60)))

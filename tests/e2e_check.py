@@ -74,6 +74,8 @@ def run_app(args, meeting_dir: Path) -> subprocess.Popen:
         # the fixture packs two planted events 48 s apart into 5 minutes; the 3-minute
         # default cooldown (unit-tested separately) would make the second one unreachable
         cmd += ["--set", f"trigger.cooldown_s={args.cooldown}"]
+    for kv in args.set:
+        cmd += ["--set", kv]
     print("$", " ".join(cmd), flush=True)
     log = open(meeting_dir / "app.log", "w")
     return subprocess.Popen(cmd, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, env={**os.environ})
@@ -158,6 +160,8 @@ def main():
     ap.add_argument("--max-latency", type=float, default=5.0)
     ap.add_argument("--meeting-dir", default=None)
     ap.add_argument("--cooldown", type=float, default=30)
+    ap.add_argument("--set", action="append", default=[], metavar="KEY=VALUE",
+                    help="config override passed to the app, e.g. llm.answer.backend=groq")
     args = ap.parse_args()
     args.mode = "ask" if args.phase == 3 else "engaged"
     args.speed = args.speed or (4.0 if args.phase == 3 else 1.0)
