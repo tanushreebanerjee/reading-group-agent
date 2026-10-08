@@ -155,3 +155,10 @@ def test_short_429_is_retried_in_place(monkeypatch):
     with pytest.raises(LLMError):
         make_llm({"backend": "groq", "model": "m"}).complete("s", "u")
     assert len(calls) == 1
+
+
+def test_claude_cli_never_sees_api_key_by_default(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-should-not-leak")
+    llm = make_llm({"backend": "claude-cli", "model": "opus"})
+    assert "ANTHROPIC_API_KEY" not in llm.env()
+    assert make_llm({"backend": "claude-cli", "use_api_key": True}).env()["ANTHROPIC_API_KEY"] == "sk-should-not-leak"

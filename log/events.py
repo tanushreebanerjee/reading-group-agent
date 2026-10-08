@@ -8,6 +8,7 @@ Event kinds:
   hand          {id, t, trigger_id, trigger, confidence, reason, text, status, status_t}
                  status: revealed | dismissed | ignored (set when it changes)
   trigger_skip  {t, why}
+  setting       {t, key, value}             changed from the control page
   meeting_end   {t}
 """
 from __future__ import annotations

@@ -132,6 +132,16 @@ python tests/loopback_check.py             # live path: plays the WAV into Black
 `papers/test.pdf` with two questions addressed to Sherlock, one wrong claim,
 and one unanswered factual question.
 
+## Live controls
+
+Open `http://127.0.0.1:8765/control` on the laptop (don't screen-share it). It shows
+what's listening and which models are in use, has Reveal/Dismiss buttons, and lets you
+change the mode, the answer and hand-checker models, answer length, excerpts per answer,
+trigger interval, cooldown and thresholds mid-meeting. Changes last for the session and are
+listed in `log.md`. The model list comes from `model_presets` in `config.yaml` (cloud
+presets appear only when their key is in `.env`) plus every model in local Ollama. The room
+display's status line shows the models in use.
+
 ## Configuration
 
 Every tunable is in `config.yaml`. Machine- or group-specific overrides go in
@@ -142,7 +152,7 @@ backends are set separately for `prep`, `answer`, `trigger`, and `summary`:
 | backend | notes |
 |---|---|
 | `ollama` | local; default for answer/trigger/summary |
-| `claude-cli` | `claude -p` on your Claude Code login; default for prep; too slow for triggers |
+| `claude-cli` | `claude -p` on your Claude Code login; default for prep; too slow for triggers. `ANTHROPIC_API_KEY` is hidden from it so it never bills your API account (set `use_api_key: true` to allow) |
 | `groq` | free tier, fast; needs `GROQ_API_KEY` (console.groq.com). Sends the transcript to Groq |
 | `cerebras`, `openrouter` | free tiers, same OpenAI-style API; `CEREBRAS_API_KEY` / `OPENROUTER_API_KEY` (untested) |
 | `gemini` | free tier, needs `GEMINI_API_KEY` (untested) |

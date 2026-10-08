@@ -76,6 +76,36 @@ llm:
     temperature: 0.2
     max_tokens: 400
 
+# Choices offered by the control page (/control) for switching models mid-meeting.
+# Cloud presets only appear when their API key is in .env; every model pulled into
+# local Ollama is offered too. Cloud presets send the transcript to that provider.
+model_presets:
+  "Groq · Qwen3.8 27B, thinking":
+    backend: groq
+    model: qwen/qwen3.8-27b
+    extra: {reasoning_effort: high, reasoning_format: hidden}
+    max_tokens: 1500
+    timeout_s: 20
+    fallback: {backend: ollama, model: qwen2.5:7b, num_ctx: 8192, keep_alive: 30m, max_tokens: 200}
+  "Groq · Qwen3.8 27B, fast":
+    backend: groq
+    model: qwen/qwen3.8-27b
+    extra: {reasoning_effort: none}
+    max_tokens: 200
+    timeout_s: 20
+    fallback: {backend: ollama, model: qwen2.5:7b, num_ctx: 8192, keep_alive: 30m, max_tokens: 200}
+  "Groq · gpt-oss-120b":
+    backend: groq
+    model: openai/gpt-oss-120b
+    extra: {reasoning_effort: low}
+    max_tokens: 1000
+    timeout_s: 20
+    fallback: {backend: ollama, model: qwen2.5:7b, num_ctx: 8192, keep_alive: 30m, max_tokens: 200}
+  "Claude Sonnet via claude -p (slow, no streaming)":
+    backend: claude-cli
+    model: sonnet
+    timeout_s: 60
+
 question_pause_s: 1.5
 question_max_s: 30          # stop collecting a question after this long regardless
 

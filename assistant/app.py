@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import sys
 import time
 from pathlib import Path
@@ -10,6 +11,7 @@ from assistant.answer import Answerer
 from assistant.hands import Hand, HandQueue
 from assistant.names import NameDetector
 from assistant.questions import Question, QuestionCollector
+from assistant import settings as S
 from assistant.triggers import Gate, TriggerChecker
 from core.llm import make_llm, same_resource
 from core.paper import Paper
@@ -52,6 +54,12 @@ class App:
         self.gate = Gate(t.get("thresholds", {}), float(t.get("cooldown_s", 180)), float(t.get("dedup_ratio", 70)))
         self.hands = HandQueue()
 
+        # mid-meeting settings (control page): what each role's model came from
+        self.role_base = {r: copy.deepcopy(cfg["llm"][r]) for r in ("answer", "trigger")}
+        self.model_choice = {"answer": S.FROM_CONFIG, "trigger": S.FROM_CONFIG}
+        self.model_opts: dict[str, dict] = {}
+        self.trigger_task: asyncio.Task | None = None
+
         # One call at a time per backend: roles on the same local Ollama share a lock (it
         # serializes anyway, and answers must not queue behind a trigger check); a role on a
         # cloud API gets its own, so a local trigger check never delays a cloud answer.
@@ -91,7 +99,17 @@ class App:
                              "latency_s": self.last_latency, "name": self.cfg.get("assistant_name"),
                              "source": "replay" if getattr(self.source, "path", None) else "live",
                              "heard": len(self.store.segments), "audio_ok": self.audio_ok,
-                             "device": self.cfg.get("audio_device")})
+                             "device": self.cfg.get("audio_device"), "models": self.models_in_use()})
+
+    def models_in_use(self) -> dict:
+        def show(role, llm):
+            label = S.describe(self.cfg["llm"][role])
+            fb = getattr(llm, "fallback", None)
+            if fb is not None and not llm._use_primary():
+                label = f"{S.describe(fb.cfg)} (fallback)"
+            return label
+        return {"answer": show("answer", self.answer_llm), "trigger": show("trigger", self.trigger_llm),
+                "stt": self.cfg["stt"].get("model")}
 
     async def send_hand_state(self) -> None:
         head = self.hands.head()
@@ -199,11 +217,11 @@ class App:
 
     async def trigger_loop(self) -> None:
         t = self.cfg.get("trigger", {})
-        interval, window = float(t.get("interval_s", 15)), float(t.get("window_s", 120))
         last_seen = 0
-        next_t = interval
+        next_t = self.now + float(t.get("interval_s", 15))
         while True:
             await self.source.clock.sleep_until(next_t)
+            interval, window = float(t.get("interval_s", 15)), float(t.get("window_s", 120))
             next_t = self.now + interval
             if len(self.store.segments) == last_seen:
                 continue  # nothing new was said
@@ -253,7 +271,13 @@ class App:
         log(f"    ✋ {hid} raised ({r.trigger}); prepared: {res.text}")
         await self.send_hand_state()
 
-    async def on_action(self, action: str) -> None:
+    async def on_action(self, msg: dict) -> None:
+        action = msg.get("action")
+        if action == "set":
+            await self.apply_setting(str(msg.get("key")), msg.get("value"))
+            return
+        if action not in ("reveal", "dismiss"):
+            return
         status = {"reveal": "revealed", "dismiss": "dismissed"}[action]
         h = self.hands.resolve(status, self.now)
         if not h:
@@ -263,6 +287,92 @@ class App:
         if status == "revealed":
             await self.hub.send({"type": "hand_revealed", "id": h.id, "trigger": h.trigger, "text": h.text})
         await self.send_hand_state()
+
+    # ---------- mid-meeting settings ----------
+
+    def settings_state(self) -> dict:
+        fields = []
+        for f in S.FIELDS:
+            d = f.as_dict()
+            if f.kind == "model":
+                role = f.key.split(".")[1]
+                d["options"] = [S.FROM_CONFIG + " · " + S.describe(self.role_base[role])] + list(self.model_opts)
+                d["value"] = (d["options"][0] if self.model_choice[role] == S.FROM_CONFIG
+                              else self.model_choice[role])
+            else:
+                d["value"] = self.mode if f.key == "mode" else S.get_path(self.cfg, f.key)
+            fields.append(d)
+        return {"type": "settings", "fields": fields}
+
+    async def send_settings(self, error: str | None = None) -> None:
+        msg = self.settings_state()
+        if error:
+            msg["error"] = error
+        await self.hub.send(msg)
+
+    async def apply_setting(self, key: str, value) -> None:
+        f = S.BY_KEY.get(key)
+        try:
+            if not f:
+                raise ValueError(f"unknown setting {key!r}")
+            value = S.coerce(f, value)
+            if f.kind == "model":
+                await self.set_model(key.split(".")[1], value)
+            elif key == "mode":
+                self.set_mode(value)
+            else:
+                S.set_path(self.cfg, key, value)
+                self.answerer.k = int(self.cfg["answer"].get("retrieval_k", 3))
+                self.answerer.max_sentences = int(self.cfg["answer"].get("max_sentences", 3))
+                self.answerer.mode = self.cfg["answer"].get("context", "retrieval")
+                self.collector.pause_s = float(self.cfg.get("question_pause_s", 1.5))
+                th = self.cfg["trigger"]
+                self.gate.thresholds = dict(th.get("thresholds", {}))
+                self.gate.cooldown_s = float(th.get("cooldown_s", 180))
+        except Exception as e:
+            log(f"[settings] {key} = {value!r} rejected: {e}")
+            await self.send_settings(error=str(e))
+            return
+        log(f"[settings] {key} = {value!r}")
+        self.events.write("setting", t=round(self.now, 2), key=key, value=value)
+        await self.send_settings()
+        await self.send_status()
+
+    async def set_model(self, role: str, label: str) -> None:
+        if label.startswith(S.FROM_CONFIG):
+            role_cfg, label = copy.deepcopy(self.role_base[role]), S.FROM_CONFIG
+        elif label in self.model_opts:
+            role_cfg = S.role_config(self.model_opts[label], self.role_base[role])
+        else:
+            raise ValueError(f"unknown model {label!r}")
+        llm = make_llm(role_cfg)
+        self.cfg["llm"][role] = role_cfg
+        self.model_choice[role] = label
+        if role == "answer":
+            self.answer_llm = self.answerer.llm = llm
+            self.spawn(asyncio.to_thread(self.answerer.warmup))   # load/prefill the new model now
+        else:
+            self.trigger_llm = self.checker.llm = llm
+        self.shared_llm = same_resource(self.cfg["llm"]["answer"], self.cfg["llm"]["trigger"])
+        self.trigger_lock = self.answer_lock if self.shared_llm else asyncio.Lock()
+
+    def set_mode(self, mode: str) -> None:
+        self.mode = self.cfg["mode"] = mode
+        if mode == "engaged" and not (self.trigger_task and not self.trigger_task.done()):
+            self.trigger_task = asyncio.create_task(self.trigger_loop())
+        elif mode == "ask" and self.trigger_task:
+            self.trigger_task.cancel()
+            self.trigger_task = None
+
+    def list_ollama_models(self) -> list[str]:
+        try:
+            import ollama
+
+            r = ollama.Client(host=self.cfg["llm"]["answer"].get("host")).list()
+            models = r.get("models", []) if isinstance(r, dict) else getattr(r, "models", [])
+            return sorted((m.get("model") or m.get("name")) if isinstance(m, dict) else m.model for m in models)
+        except Exception:
+            return []
 
     # ---------- lifecycle ----------
 
@@ -285,7 +395,9 @@ class App:
         if hasattr(self.source, "last_sound"):
             loops.append(asyncio.create_task(self.audio_watch()))
         if self.mode == "engaged":
-            loops.append(asyncio.create_task(self.trigger_loop()))
+            self.trigger_task = asyncio.create_task(self.trigger_loop())
+        self.model_opts = S.model_options(self.cfg, await asyncio.to_thread(self.list_ollama_models))
+        await self.send_settings()
         try:
             await self.consume()
             # replay finished: let a trailing question close, then wait for in-flight work
@@ -296,7 +408,7 @@ class App:
                 log(f"[assistant] replay done; holding {self.hold_s:.0f}s for reveal/dismiss")
                 await asyncio.sleep(self.hold_s)
         finally:
-            for t in loops:
+            for t in loops + ([self.trigger_task] if self.trigger_task else []):
                 t.cancel()
             await self.finish()
             server.server.should_exit = True

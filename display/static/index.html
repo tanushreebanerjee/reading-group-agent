@@ -62,6 +62,7 @@
   <span><span class="dot" id="dot"></span><span id="listening">connecting</span></span>
   <span id="mode">mode: –</span>
   <span id="latency">last answer: –</span>
+  <span id="models"></span>
   <span><kbd>R</kbd> reveal · <kbd>D</kbd> dismiss</span>
 </footer>
 <script>
@@ -93,6 +94,8 @@ function handle(m) {
       $("mode").textContent = "mode: " + m.mode;
       if (m.name) $("name").firstChild.textContent = m.name + " ";
       if (m.latency_s != null) $("latency").textContent = `last answer: ${m.latency_s.toFixed(1)} s`;
+      if (m.models) $("models").textContent =
+        `answers: ${m.models.answer}` + (m.mode === "engaged" ? ` · hands: ${m.models.trigger}` : "");
       break;
     case "answer_start":
       answerId = m.id; $("label").textContent = "Answer";

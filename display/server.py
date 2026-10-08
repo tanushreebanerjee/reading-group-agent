@@ -8,7 +8,10 @@ Server -> client messages (JSON, field "type"):
   hand_raised    {id, trigger, count}         # only the trigger type, never the content
   hand_revealed  {id, trigger, text}
   hand_cleared   {id, count}
-Client -> server: {"action": "reveal" | "dismiss"}
+  settings       {fields: [{key, label, kind, options, min, max, value}], error?}   # for /control
+Client -> server: {"action": "reveal" | "dismiss"} or {"action": "set", "key": ..., "value": ...}
+Actions are only accepted from pages served by this server (Origin check), so another
+website open in the same browser cannot reveal hands or change settings.
 """
 from __future__ import annotations
 
@@ -16,6 +19,7 @@ import asyncio
 import json
 from pathlib import Path
 from typing import Awaitable, Callable
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
@@ -29,7 +33,7 @@ class Hub:
     def __init__(self):
         self.clients: set[WebSocket] = set()
         self.state: dict[str, dict] = {}   # last message per "slot" for late joiners
-        self.on_action: Callable[[str], Awaitable[None]] | None = None
+        self.on_action: Callable[[dict], Awaitable[None]] | None = None
 
     async def send(self, msg: dict) -> None:
         t = msg["type"]
@@ -44,6 +48,8 @@ class Hub:
             self.state["screen"] = dict(msg)
         elif t in ("hand_raised", "hand_cleared"):
             self.state["hand"] = msg
+        elif t == "settings":
+            self.state["settings"] = {k: v for k, v in msg.items() if k != "error"}
         else:
             self.state[t] = msg
         data = json.dumps(msg)
@@ -57,9 +63,17 @@ class Hub:
         """Accept a client and replay the current state so a reloaded page is up to date."""
         await ws.accept()
         self.clients.add(ws)
-        for key in ("status", "screen", "hand"):
+        for key in ("status", "screen", "hand", "settings"):
             if key in self.state:
                 await ws.send_text(json.dumps(self.state[key]))
+
+
+LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
+def origin_ok(origin: str | None) -> bool:
+    """Browsers send Origin on websocket upgrades; scripts (tests) usually don't."""
+    return origin is None or urlparse(origin).hostname in LOCAL_HOSTS
 
 
 def create_app(hub: Hub) -> FastAPI:
@@ -69,18 +83,24 @@ def create_app(hub: Hub) -> FastAPI:
     async def index():
         return HTMLResponse((STATIC / "index.html").read_text())
 
+    @app.get("/control")
+    async def control():
+        return HTMLResponse((STATIC / "control.html").read_text())
+
     @app.websocket("/ws")
     async def ws_endpoint(ws: WebSocket):
+        trusted = origin_ok(ws.headers.get("origin"))
         await hub.connect(ws)
         try:
             while True:
                 raw = await ws.receive_text()
                 try:
-                    action = json.loads(raw).get("action")
-                except (json.JSONDecodeError, AttributeError):
+                    msg = json.loads(raw)
+                except json.JSONDecodeError:
                     continue
-                if action in ("reveal", "dismiss") and hub.on_action:
-                    await hub.on_action(action)
+                if (trusted and isinstance(msg, dict) and msg.get("action") in ("reveal", "dismiss", "set")
+                        and hub.on_action):
+                    await hub.on_action(msg)
         except WebSocketDisconnect:
             pass
         finally:

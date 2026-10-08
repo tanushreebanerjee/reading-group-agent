@@ -102,6 +102,17 @@ class ClaudeCLILLM(LLM):
     """
 
     name = "claude-cli"
+    # Variables that make `claude` bill an API account instead of using the Claude Code login.
+    BILLING_VARS = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")
+
+    def env(self) -> dict:
+        """Environment for `claude -p`: .env may hold ANTHROPIC_API_KEY for the paid `anthropic`
+        backend, and claude would use (and bill) it. Strip it unless use_api_key: true."""
+        env = dict(os.environ)
+        if not self.cfg.get("use_api_key"):
+            for var in self.BILLING_VARS:
+                env.pop(var, None)
+        return env
 
     def complete(self, system, user, *, json_mode=False, max_tokens=None, temperature=None):
         exe = shutil.which("claude")
@@ -114,7 +125,7 @@ class ClaudeCLILLM(LLM):
         if self.model:
             cmd += ["--model", self.model]
         try:
-            r = subprocess.run(cmd, input=user, capture_output=True, text=True,
+            r = subprocess.run(cmd, input=user, capture_output=True, text=True, env=self.env(),
                                timeout=float(self.cfg.get("timeout_s", 600)))
         except subprocess.TimeoutExpired as e:
             raise LLMError("claude -p timed out") from e

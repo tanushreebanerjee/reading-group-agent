@@ -26,7 +26,7 @@ def _context(segs: list[Segment], t0: float, t1: float) -> str:
 
 
 def collect(events: list[dict]) -> dict:
-    out = {"start": None, "end": None, "answers": [], "hands": {}, "suppressed": [], "skips": 0}
+    out = {"start": None, "end": None, "answers": [], "hands": {}, "suppressed": [], "skips": 0, "settings": []}
     for ev in events:
         k = ev["kind"]
         if k == "meeting_start":
@@ -43,6 +43,8 @@ def collect(events: list[dict]) -> dict:
             out["suppressed"].append(ev)
         elif k == "trigger_skip":
             out["skips"] += 1
+        elif k == "setting":
+            out["settings"].append(ev)
     return out
 
 
@@ -77,6 +79,8 @@ def render(cfg: dict, meeting_dir: Path, info: dict, segs: list[Segment], summar
     L.append(f"- Mode: {start.get('mode', '?')} · duration {fmt_ts(dur)} · source: {start.get('source', '?')}")
     L.append(f"- STT: {start.get('stt_model', '?')} · answer LLM: {start.get('answer_llm', '?')} · "
              f"trigger LLM: {start.get('trigger_llm', '?')}")
+    for ev in info.get("settings", []):
+        L.append(f"- [{fmt_ts(ev['t'])}] setting changed: `{ev['key']}` = `{ev['value']}`")
     L += ["", "Fill in each `helpful:` line with `yes` or `no`. Leave it blank if unsure.", ""]
     L += ["## Summary", "", summary or "_Summary unavailable._", ""]
 
