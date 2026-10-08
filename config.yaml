@@ -112,6 +112,7 @@ model_presets:
 voice:
   mode: "off"               # off | answers | answers+reveal (a raised hand is spoken only after Reveal)
   backend: kokoro           # kokoro (local) | say (macOS) | groq (Orpheus, cloud)
+  engine: auto              # kokoro: auto (Apple GPU via MLX if available, else CPU) | mlx | onnx
   output_device: "BlackHole 16ch"   # "default" = laptop speakers, for testing
   voice: af_heart           # kokoro voice: af_heart, af_bella, am_michael, bf_emma, bm_george, ...
   speed: 1.0

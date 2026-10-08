@@ -72,6 +72,14 @@ def sentences(text: str, first_max_words: int = 10) -> list[str]:
 
 # ---------- backends ----------
 
+def mlx_available() -> bool:
+    import platform
+    from importlib.util import find_spec
+
+    return (sys.platform == "darwin" and platform.machine() == "arm64"
+            and find_spec("mlx_audio") is not None and find_spec("misaki") is not None)
+
+
 class TTS:
     name = "base"
 
@@ -86,11 +94,20 @@ class TTS:
 
 
 class KokoroTTS(TTS):
+    """Kokoro-82M. engine: auto (MLX on the Apple GPU if available, else ONNX on the CPU) | mlx | onnx.
+    MLX is ~3x faster to first audio on an M4. All MLX calls run on one dedicated thread,
+    since MLX streams are per thread."""
+
     name = "kokoro"
 
     def __init__(self, cfg: dict):
         super().__init__(cfg)
         self._k = None
+        self._mlx = None
+        self._pool = None
+        self.engine = cfg.get("engine", "auto")
+        if self.engine == "auto":
+            self.engine = "mlx" if mlx_available() else "onnx"
         self.voice = cfg.get("voice", "af_heart")
         self.speed = float(cfg.get("speed", 1.0))
         self.lang = cfg.get("lang", "en-us")
@@ -117,8 +134,25 @@ class KokoroTTS(TTS):
         return self._k
 
     def synth(self, text):
+        if self.engine == "mlx":
+            if self._pool is None:
+                from concurrent.futures import ThreadPoolExecutor
+
+                self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="kokoro-mlx")
+            return self._pool.submit(self._synth_mlx, text).result()
         x, sr = self.load().create(text, voice=self.voice, speed=self.speed, lang=self.lang)
         return np.asarray(x, dtype=np.float32), int(sr)
+
+    def _synth_mlx(self, text):
+        if self._mlx is None:
+            from mlx_audio.tts.utils import load_model
+
+            self._mlx = load_model(self.cfg.get("mlx_model", "mlx-community/Kokoro-82M-bf16"))
+        # voice prefix picks the accent: af_/am_ American (a), bf_/bm_ British (b)
+        lang_code = self.voice[0] if self.voice[:1] in ("a", "b") else "a"
+        parts = [np.asarray(r.audio, dtype=np.float32)
+                 for r in self._mlx.generate(text=text, voice=self.voice, speed=self.speed, lang_code=lang_code)]
+        return (np.concatenate(parts) if parts else np.zeros(0, np.float32)), 24000
 
 
 class SayTTS(TTS):

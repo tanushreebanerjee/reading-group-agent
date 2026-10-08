@@ -151,8 +151,9 @@ or from the control page.
 1. `brew install blackhole-16ch` (a second virtual device, separate from the 2ch one Zoom
    plays into), then restart the audio service as for BlackHole 2ch.
 2. In Zoom on the assistant laptop: **Microphone → BlackHole 16ch**, and unmute.
-3. The voice is Kokoro, running locally (free; the model files download to
-   `~/.cache/kokoro-onnx` on first use, about 350 MB). `voice.backend: say` uses macOS voices
+3. The voice is Kokoro, running locally (free). On Apple Silicon it runs on the GPU via MLX
+   (`voice.engine: auto`), about 1 s to first audio; elsewhere it uses the CPU (ONNX, ~3 s).
+   Model files download on first use (Hugging Face cache for MLX, `~/.cache/kokoro-onnx` for ONNX). `voice.backend: say` uses macOS voices
    instead; `groq` uses Orpheus on Groq once you accept its terms in the Groq console.
 4. To try it without Zoom, set `voice.output_device: default` to hear it on the laptop speakers.
 
