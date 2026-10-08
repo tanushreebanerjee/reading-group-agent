@@ -55,7 +55,7 @@ llm:
     <<: *nexus
     context: retrieval      # transcript + brief only (the whole paper would overflow 32k)
     think: true
-    max_tokens: 2000
-    timeout_s: 180
+    max_tokens: 6000          # thinking counts toward this; too low cuts the summary off
+    timeout_s: 300
     summary_chars: 80000    # a whole meeting in one pass (~20k tokens)
     fallback: {backend: ollama, model: qwen2.5:7b, num_ctx: 8192, keep_alive: 30m, max_tokens: 400, summary_chars: 12000}
