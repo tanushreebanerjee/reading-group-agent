@@ -8,6 +8,7 @@ Event kinds:
                           already_said | invalid
   hand          {id, t, trigger_id, trigger, confidence, reason, text, status, status_t}
                  status: revealed | dismissed | ignored | expired (set when it changes)
+  hand_text     {id, t, text, cited, prep_s}    the hand's text, prepared after it was raised
   trigger_skip  {t, why}
   setting       {t, key, value}             changed from the control page
   meeting_end   {t}

@@ -91,13 +91,17 @@ done
 NODE=$(echo "$READY" | sed -E 's/.*node=([^ ]+).*/\1/')
 PORT=$(echo "$READY" | sed -E 's/.*port=([0-9]+).*/\1/')
 
-# (re)open the tunnel through the existing connection: no new Duo prompt
-"${SSH[@]}" -O cancel -L "$LOCAL_PORT:$NODE:$PORT" "$HOST" 2>/dev/null || true
+# (re)open the tunnel through the existing connection: no new Duo prompt. Close the tunnel
+# this script opened last time first (it may point at an old job's node and port).
+for spec in "$(cat "$STATE/forward" 2>/dev/null)" "$LOCAL_PORT:$NODE:$PORT"; do
+  [ -n "$spec" ] && "${SSH[@]}" -O cancel -L "$spec" "$HOST" 2>/dev/null || true
+done
 "${SSH[@]}" -O forward -L "$LOCAL_PORT:$NODE:$PORT" "$HOST"
+echo "$LOCAL_PORT:$NODE:$PORT" > "$STATE/forward"
 for _ in 1 2 3 4 5; do tunnel_ok && break; sleep 1; done
 if tunnel_ok; then
   echo "ready: $MODELS on $NODE, at http://127.0.0.1:$LOCAL_PORT"
-  echo "pick \"Nexus · Qwen2.5 32B\" on the control page, or see README > Nexus GPU for making it the default"
+  echo "start the assistant with --profile nexus (see README > Meeting day)"
 else
   echo "tunnel did not come up (node $NODE port $PORT)"; exit 1
 fi

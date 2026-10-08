@@ -24,7 +24,9 @@ fi
 PORT=$(python3 -c 'import socket; s=socket.socket(); s.bind(("",0)); print(s.getsockname()[1])')
 export OLLAMA_HOST="0.0.0.0:$PORT"
 export OLLAMA_MODELS="$SCRATCH/models"
-export OLLAMA_NUM_PARALLEL=2          # an answer can run while a trigger check is in flight
+# answers, hand checks (every few seconds) and hand text (with thinking) overlap; with too few
+# slots an answer waits behind them. The model uses ~18 of 48 GB, so 4 slots fit.
+export OLLAMA_NUM_PARALLEL="${RGA_NUM_PARALLEL:-4}"
 export OLLAMA_KEEP_ALIVE=24h
 export OLLAMA_FLASH_ATTENTION=1
 

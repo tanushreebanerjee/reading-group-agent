@@ -14,7 +14,12 @@ voice:
   output_device: "BlackHole 16ch"   # Zoom's microphone
 
 trigger:
-  interval_s: 10            # Nexus checks take ~2-4 s, so check more often than the local default
+  # Nexus checks take ~3 s and run alongside answers, so check after every new line (the loop
+  # skips when nothing new was said) and jump in more often than the local defaults allow.
+  interval_s: 4
+  cooldown_s: 60            # between any two hands (default 180)
+  type_cooldown_s:
+    point: 90               # between two points (default 300)
 
 llm:
   answer: &nexus

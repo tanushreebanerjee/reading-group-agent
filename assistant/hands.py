@@ -12,7 +12,7 @@ class Hand:
     trigger: str
     confidence: float
     reason: str
-    text: str                 # the prepared interjection (not shown until revealed)
+    text: str | None          # the prepared interjection (None while it is being prepared)
     status: str = "pending"   # pending | revealed | dismissed | ignored | expired
     status_t: float | None = None
     quote: str = ""           # what the person said that the hand responds to

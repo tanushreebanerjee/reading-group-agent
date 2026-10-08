@@ -40,6 +40,7 @@ class ReplaySource:
         self.path = Path(path)
         self.clock = SimClock(speed)
         self.prompt = prompt or stt_prompt(cfg)
+        self._next = None
         self.done = False
 
     def cache_path(self) -> Path:
@@ -66,13 +67,18 @@ class ReplaySource:
         return segs
 
     def pending_start(self) -> float | None:
-        return None  # replay emits whole segments; nothing is ever half-transcribed
+        """Start of the segment being spoken right now (emitted only when it ends), like live
+        mode's not-yet-transcribed speech: a question continuing into it isn't closed early."""
+        nxt = self._next
+        return nxt.start if nxt is not None and nxt.start <= self.clock.now() else None
 
     async def segments(self):
         segs = await asyncio.to_thread(self.load_segments)
         self.clock = SimClock(self.clock.speed)  # start the meeting clock after transcription
         for seg in segs:
+            self._next = seg
             await self.clock.sleep_until(seg.end)
+            self._next = None
             yield seg
         self.done = True
 

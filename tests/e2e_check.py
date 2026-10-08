@@ -74,6 +74,8 @@ def run_app(args, meeting_dir: Path) -> subprocess.Popen:
         # the fixture packs two planted events 48 s apart into 5 minutes; the 3-minute
         # default cooldown (unit-tested separately) would make the second one unreachable
         cmd += ["--set", f"trigger.cooldown_s={args.cooldown}", "--set", f"trigger.type_cooldown_s.point={args.cooldown}"]
+    if args.profile:   # never speak during a test: a real Zoom may be using the voice device as its mic
+        cmd += ["--profile", args.profile, "--set", "voice.mode=off"]
     for kv in args.set:
         cmd += ["--set", kv]
     print("$", " ".join(cmd), flush=True)
@@ -117,7 +119,10 @@ def check_ask(events, meta, turns, max_latency) -> list[tuple[bool, str]]:
 def check_engaged(events, meta, turns, ws_msgs, discuss=False) -> list[tuple[bool, str]]:
     res = []
     by_turn = {t["turn"]: t for t in turns}
-    hands = [e for e in events if e["kind"] == "hand"]
+    hands = [dict(e) for e in events if e["kind"] == "hand"]
+    texts = {e["id"]: e["text"] for e in events if e["kind"] == "hand_text"}
+    for h in hands:   # hand text is prepared after the hand goes up
+        h["text"] = texts.get(h["id"], h.get("text"))
     statuses = {e["id"]: e["status"] for e in events if e["kind"] == "hand_status"}
     hand_kinds = ("contradiction", "gap", "point") if discuss else ("contradiction", "gap")
     for ev in [e for e in meta["events"] if e["kind"] in hand_kinds]:
@@ -162,6 +167,7 @@ def main():
     ap.add_argument("--meeting-dir", default=None)
     ap.add_argument("--cooldown", type=float, default=30)
     ap.add_argument("--discuss", action="store_true", help="phase 5 in discuss mode (also expects the planted point)")
+    ap.add_argument("--profile", default=None, help="run the app with a profile, e.g. nexus (voice forced off)")
     ap.add_argument("--set", action="append", default=[], metavar="KEY=VALUE",
                     help="config override passed to the app, e.g. llm.answer.backend=groq")
     args = ap.parse_args()

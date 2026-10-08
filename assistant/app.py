@@ -262,7 +262,8 @@ class App:
                 took = time.monotonic() - t0
             now = self.now
             # don't let slow checks crowd out answers: wait at least 1.5x the last check's duration
-            next_t = max(next_t, now + 1.5 * took * self.source.clock.speed)
+            # On a server shared with answers, leave room for them; a concurrent server needn't
+            next_t = max(next_t, now + (1.5 if self.shared_llm else 1.0) * took * self.source.clock.speed)
             outcome = self.gate.check(r, now, human, recent)
             await self.expire_hands(now)
             if outcome == "none":
@@ -298,19 +299,37 @@ class App:
             await self.send_hand_state()
 
     async def raise_hand(self, tid: str, r, now: float, transcript: str) -> None:
+        """Raise the hand at once; prepare what it will say in the background. If someone presses
+        Reveal before the text is ready, the display shows "preparing" and fills in when it is."""
         hid = f"H{len(self.hands.hands) + 1}"
-        # prepare the interjection now so Reveal is instant; it is not shown until revealed
-        async with self.interject_lock:
-            # retrieve with the person's words plus the checker's short reason (which names the topic)
-            res = await self.interjector.run("interjection", f"{r.quote} {r.reason}", transcript, trigger=r.trigger,
-                                          reason=f'"{r.quote}" ({r.reason})', max_sentences=2)
-        hand = Hand(hid, round(now, 2), tid, r.trigger, r.confidence, r.reason, res.text,
+        hand = Hand(hid, round(now, 2), tid, r.trigger, r.confidence, r.reason, None,
                     quote=r.quote, quote_t=self.quote_time(r.quote))
         self.hands.add(hand)
         self.events.write("hand", id=hid, t=hand.t, trigger_id=tid, trigger=r.trigger, confidence=r.confidence,
-                          reason=r.reason, quote=r.quote, text=res.text, cited=res.cited, status="pending")
-        log(f"    ✋ {hid} raised ({r.trigger}); prepared: {res.text}")
+                          reason=r.reason, quote=r.quote, quote_t=hand.quote_t, text=None, status="pending")
+        log(f"    ✋ {hid} raised ({r.trigger})")
         await self.send_hand_state()
+        self.spawn(self.prepare_hand(hand, r, transcript))
+
+    async def prepare_hand(self, hand: Hand, r, transcript: str) -> None:
+        t0 = time.monotonic()
+        async with self.interject_lock:
+            # retrieve with the person's words plus the checker's short reason (which names the topic)
+            res = await self.interjector.run("interjection", f"{r.quote} {r.reason}", transcript, trigger=r.trigger,
+                                             reason=f'"{r.quote}" ({r.reason})', max_sentences=2)
+        hand.text = res.text
+        self.events.write("hand_text", id=hand.id, t=round(self.now, 2), text=res.text, cited=res.cited,
+                          prep_s=round(time.monotonic() - t0, 2))
+        log(f"    ✋ {hand.id} text ready ({time.monotonic() - t0:.1f}s): {res.text}")
+        if hand.status == "revealed":   # Reveal was pressed while it was being prepared
+            await self.show_revealed(hand)
+
+    async def show_revealed(self, h: Hand) -> None:
+        await self.hub.send({"type": "hand_revealed", "id": h.id, "trigger": h.trigger,
+                             "text": h.text if h.text is not None else "…preparing",
+                             "quote": h.quote, "quote_t": h.quote_t})
+        if h.text is not None and self.voice_mode() == "answers+reveal":
+            self.speak(" ".join(x for x in (spoken_intro(h), h.text) if x))
 
     async def on_action(self, msg: dict) -> None:
         action = msg.get("action")
@@ -331,10 +350,7 @@ class App:
         self.events.write("hand_status", id=h.id, status=status, t=round(self.now, 2))
         log(f"    ✋ {h.id} {status}")
         if status == "revealed":
-            await self.hub.send({"type": "hand_revealed", "id": h.id, "trigger": h.trigger, "text": h.text,
-                                 "quote": h.quote, "quote_t": h.quote_t})
-            if self.voice_mode() == "answers+reveal":
-                self.speak(" ".join(x for x in (spoken_intro(h), h.text) if x))
+            await self.show_revealed(h)
         await self.send_hand_state()
 
     # ---------- voice output ----------

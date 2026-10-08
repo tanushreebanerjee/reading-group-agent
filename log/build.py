@@ -37,6 +37,8 @@ def collect(events: list[dict]) -> dict:
             out["answers"].append(ev)
         elif k == "hand":
             out["hands"][ev["id"]] = dict(ev)
+        elif k == "hand_text" and ev["id"] in out["hands"]:   # text prepared after the hand went up
+            out["hands"][ev["id"]].update(text=ev["text"], cited=ev.get("cited"))
         elif k == "hand_status" and ev["id"] in out["hands"]:
             out["hands"][ev["id"]].update(status=ev["status"], status_t=ev["t"])
         elif k == "trigger" and ev["outcome"] != "raised":
@@ -119,7 +121,7 @@ def render(cfg: dict, meeting_dir: Path, info: dict, segs: list[Segment], summar
         L.append(f"### {h['id']} · {fmt_ts(h['t'])} · {h['trigger']} · confidence {h['confidence']:.2f} · {status}")
         L.append(f"<!-- id={h['id']} kind=hand type={h['trigger']} conf={h['confidence']:.3f} status={status} -->")
         L += [f"**Heard:** \"{h.get('quote', '')}\"", "", f"**Why the hand went up:** {h['reason']}", "",
-              f"**Prepared interjection:** {h['text']}", ""]
+              f"**Prepared interjection:** {h.get('text') or '_(not prepared before the meeting ended)_'}", ""]
         L += ["**Context:**", _context(segs, h["t"] - ctx_s, h["t"]), "", HELPFUL, ""]
 
     L += ["## Triggers that did not raise a hand", "",
