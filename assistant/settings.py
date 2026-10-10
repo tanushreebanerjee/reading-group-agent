@@ -40,6 +40,8 @@ FIELDS = [
           help="answers: speak answers when asked; answers+reveal: also speak a raised hand when revealed"),
     Field("voice.backend", "Voice", "choice", ["kokoro", "say", "groq"],
           help="kokoro: local, natural; say: macOS, instant; groq: Orpheus (cloud, accept terms first)"),
+    Field("display.transcript", "Live transcript on the display", "choice", ["on", "off"],
+          help="off: transcript lines are not sent to the display or the shared link at all"),
     Field("answer.max_sentences", "Answer length (sentences)", "int", min=1, max=6),
     Field("answer.retrieval_k", "Paper excerpts per answer", "int", min=1, max=10,
           help="more = better recall, slower on local models"),

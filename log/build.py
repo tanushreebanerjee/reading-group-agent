@@ -45,6 +45,8 @@ def collect(events: list[dict]) -> dict:
             out["suppressed"].append(ev)
         elif k == "trigger_skip":
             out["skips"] += 1
+        elif k == "notes":
+            out["notes"] = ev.get("text") or ""
         elif k == "setting":
             out["settings"].append(ev)
     return out
@@ -101,6 +103,8 @@ def render(cfg: dict, meeting_dir: Path, info: dict, segs: list[Segment], summar
         L.append(f"- [{fmt_ts(ev['t'])}] setting changed: `{ev['key']}` = `{ev['value']}`")
     L += ["", "Fill in each `helpful:` line with `yes` or `no`. Leave it blank if unsure.", ""]
     L += ["## Summary", "", summary or "_Summary unavailable._", ""]
+    if info.get("notes"):
+        L += ["## Running notes (as Sherlock kept them during the meeting)", "", info["notes"], ""]
 
     L += ["## Answers", ""]
     if not info["answers"]:

@@ -74,6 +74,7 @@ class Answerer:
         return Retriever.format(chunks), [c.label for c in chunks]
 
     def build(self, prompt_name: str, question: str, transcript: str, **extra) -> tuple[str, str, list[str]]:
+        extra.setdefault("notes", "(nothing yet)")
         excerpts, sources = self.excerpts(question)
         system = system_prompt(self.cfg, self.brief, prompt_name, paper_text=self.paper_in_prefix(),
                                max_sentences=self.max_sentences)
@@ -124,5 +125,5 @@ class Answerer:
     def paper_in_prefix(self) -> str | None:
         return self.paper.full_text if self.paper and self.context_mode() == "full_paper" else None
 
-    async def answer(self, question: str, transcript: str, on_delta=None) -> AnswerResult:
-        return await self.run("answer", question, transcript, on_delta)
+    async def answer(self, question: str, transcript: str, on_delta=None, notes: str = "(nothing yet)") -> AnswerResult:
+        return await self.run("answer", question, transcript, on_delta, notes=notes)

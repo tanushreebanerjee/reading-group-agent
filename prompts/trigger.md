@@ -22,6 +22,10 @@ These reasons count:
 
 $point_rule
 
+Use the meeting notes to follow the whole discussion: a claim may conflict with
+something established earlier, or return to a question that is still open. But
+raise a hand only about something said in the transcript below, and quote it.
+
 Otherwise answer "none". "none" is the right answer almost all the time.
 Do not flag something listed under "Already raised".
 

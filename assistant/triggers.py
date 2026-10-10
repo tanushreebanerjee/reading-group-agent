@@ -139,7 +139,7 @@ class TriggerChecker:
 
             self.retriever = Retriever(paper)
 
-    def build(self, transcript: str, already_raised: list[str]) -> tuple[str, str]:
+    def build(self, transcript: str, already_raised: list[str], notes: str = "(nothing yet)") -> tuple[str, str]:
         from core.llm import active
 
         full = self.paper is not None and active(self.llm).cfg.get("context") == "full_paper"
@@ -160,7 +160,7 @@ class TriggerChecker:
 
             excerpts = Retriever.format(self.retriever.search(recent, k)) or "(none)"
         user = load_prompt(self.cfg, "trigger_user", transcript=transcript or "(silence)", raised=raised,
-                           excerpts=excerpts)
+                           excerpts=excerpts, notes=notes)
         return system, user
 
     def warmup(self) -> None:
@@ -168,8 +168,8 @@ class TriggerChecker:
         system, _ = self.build("", [])
         self.llm.complete(system, "Reply with: ready", max_tokens=1)
 
-    def check(self, transcript: str, already_raised: list[str]) -> TriggerResult:
-        system, user = self.build(transcript, already_raised)
+    def check(self, transcript: str, already_raised: list[str], notes: str = "(nothing yet)") -> TriggerResult:
+        system, user = self.build(transcript, already_raised, notes)
         try:
             raw = self.llm.complete(system, user, json_mode=True)
         except Exception as e:

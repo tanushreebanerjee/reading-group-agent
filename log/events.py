@@ -11,6 +11,7 @@ Event kinds:
   hand_text     {id, t, text, cited, prep_s}    the hand's text, prepared after it was raised
   trigger_skip  {t, why}
   setting       {t, key, value}             changed from the control page
+  notes         {t, upto, text, llm_s}      running meeting notes (latest wins)
   meeting_end   {t}
 """
 from __future__ import annotations

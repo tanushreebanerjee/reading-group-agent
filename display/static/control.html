@@ -71,7 +71,7 @@
     <h2>Raised hand</h2>
     <div class="hand">
       <span id="hand">none</span>
-      <button id="reveal" disabled>Reveal</button>
+      <button id="reveal" disabled>Call on Sherlock</button>
       <button id="dismiss" disabled>Dismiss</button>
     </div>
   </section>
@@ -112,7 +112,8 @@ function handle(m) {
     $("stop").disabled = !m.speaking;
   } else if (m.type === "hand_raised" || m.type === "hand_cleared") {
     const on = m.count > 0;
-    $("hand").innerHTML = on ? `<b>${m.trigger}</b>${m.count > 1 ? ` (+${m.count - 1} more)` : ""}` : "none";
+    const look = {contradiction: "⚠️ correction", gap: "❓ unanswered question", point: "🙋 point"}[m.trigger] || m.trigger;
+    $("hand").innerHTML = on ? `<b>${look}</b>${m.count > 1 ? ` (+${m.count - 1} more)` : ""}` : "none";
     $("reveal").disabled = $("dismiss").disabled = !on;
   } else if (m.type === "settings") {
     if (m.share_url) { $("share").style.display = ""; $("share-url").textContent = m.share_url; }

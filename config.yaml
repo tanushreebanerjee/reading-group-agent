@@ -185,6 +185,9 @@ trigger:
   type_cooldown_s:
     point: 300              # and at least this long between two points
   point_recent_s: 60        # a point must quote something said in the last N seconds
+  notes_interval_s: 60      # update the running meeting notes this often (0 = off)
+  notes_max_words: 250
+  notes_max_tokens: 900
   expire_s:                 # lower a hand nobody revealed after N seconds (0 = never)
     point: 120
     gap: 240
@@ -195,6 +198,7 @@ trigger:
 display:
   host: 127.0.0.1
   port: 8765
+  transcript: "on"          # live transcript panel on the display (collapsed by default); "off" = never sent
   share: false              # --share: public link to the display (secret key in the URL), for the Zoom chat
   share_method: auto        # auto = cloudflared (downloaded to ~/.cache/rga on first use) | localhost.run
 

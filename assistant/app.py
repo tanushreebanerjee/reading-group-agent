@@ -12,6 +12,7 @@ from pathlib import Path
 from assistant.answer import Answerer
 from assistant.hands import Hand, HandQueue, spoken_intro
 from assistant.names import NameDetector
+from assistant.notes import MeetingNotes
 from assistant.questions import Question, QuestionCollector
 from assistant import settings as S
 from assistant.triggers import HAND_MODES, MODE_TYPES, Gate, TriggerChecker
@@ -71,6 +72,7 @@ class App:
         t = cfg.get("trigger", {})
         self.trigger_llm = make_llm(cfg["llm"]["trigger"])
         self.checker = TriggerChecker(cfg, self.trigger_llm, brief, paper, mode=self.mode)
+        self.notes = MeetingNotes(cfg, self.trigger_llm, brief)   # running notes, on the hands model
         self.gate = Gate(t.get("thresholds", {}), float(t.get("cooldown_s", 180)), float(t.get("dedup_ratio", 70)),
                          type_cooldown_s=dict(t.get("type_cooldown_s") or {}),
                          allowed=MODE_TYPES.get(self.mode, MODE_TYPES["engaged"]))
@@ -178,8 +180,18 @@ class App:
         self.listening = False
         await self.send_status()
 
+    def show_transcript(self) -> bool:
+        return str((self.cfg.get("display") or {}).get("transcript", "on")).lower() not in ("off", "false", "0")
+
+    def push_line(self, seg: Segment) -> None:
+        """Send a transcript line to the display's live-transcript panel (if enabled)."""
+        if self.show_transcript():
+            self.spawn(self.hub.send({"type": "transcript", "lines": [
+                {"start": round(seg.start, 1), "speaker": seg.speaker, "text": seg.text}]}))
+
     def on_segment(self, seg: Segment) -> None:
         self.store.add(seg)
+        self.push_line(seg)
         log(f"[{seg.start:7.1f}] {seg.text}")
         if len(self.store.segments) % 5 == 1:   # keep the display's "heard" count roughly current
             self.spawn(self.send_status())
@@ -215,7 +227,7 @@ class App:
 
             async with self.answer_lock:
                 res = await self.answerer.answer(question, self.recent_transcript(
-                    float(self.cfg["answer"].get("transcript_window_s", 90))), on_delta)
+                    float(self.cfg["answer"].get("transcript_window_s", 90))), on_delta, notes=self.notes.for_prompt)
         finally:
             self.answering -= 1
         # end-to-end latency in wall seconds, measured from the end of the question audio:
@@ -230,8 +242,10 @@ class App:
         await self.send_status()
         await self.supersede_hands(q)
         # record the answer in the transcript so later prompts know the question was answered
-        self.store.add(Segment(round(q.end + 0.01, 2), round(self.now, 2), res.text,
-                               speaker=self.cfg.get("assistant_name", "Sherlock")))
+        own = Segment(round(q.end + 0.01, 2), round(self.now, 2), res.text,
+                      speaker=self.cfg.get("assistant_name", "Sherlock"))
+        self.store.add(own)
+        self.push_line(own)
         self.events.write("answer", id=aid, t=round(self.now, 2), question=question, q_start=q.start,
                           q_end=q.end, detected_t=round(detected_t, 2), text=res.text, latency_s=round(e2e, 2),
                           first_words_s=first_words and round(first_words, 2),
@@ -240,6 +254,34 @@ class App:
                           served_by=repr(served_by(self.answer_llm)))
         log(f"    -> {aid} (first words {first_words or -1:.1f}s / complete {e2e:.1f}s after question end, llm {res.latency_s:.1f}s"
             f"{'' if res.cited else ', NO CITATION'}): {res.text}")
+
+    async def notes_loop(self) -> None:
+        """Every trigger.notes_interval_s, fold what was said since the last update into the running
+        notes. Waits while a question to Sherlock is open or being answered (answers come first)."""
+        t = self.cfg.get("trigger", {})
+        interval = float(t.get("notes_interval_s", 60))
+        if interval <= 0:
+            return
+        next_t = self.now + interval
+        while True:
+            await self.source.clock.sleep_until(next_t)
+            if self.answering or self.collector.collecting:
+                next_t = self.now + 3.0
+                continue
+            next_t = self.now + interval
+            new = [s for s in self.store.segments if s.end > self.notes.upto]
+            if len(new) < 2:
+                continue
+            t0 = time.monotonic()
+            try:
+                async with self.trigger_lock:
+                    text = await asyncio.to_thread(self.notes.update, new)
+            except Exception as e:
+                log(f"    .. notes update failed: {e}")
+                continue
+            self.events.write("notes", t=round(self.now, 2), upto=round(self.notes.upto, 2), text=text,
+                              llm_s=round(time.monotonic() - t0, 2))
+            log(f"    .. notes updated ({len(new)} new lines, {time.monotonic() - t0:.1f}s, {len(text.split())} words)")
 
     async def audio_watch(self) -> None:
         """Live input only: warn (terminal + display) when the device has been silent for a while,
@@ -290,7 +332,8 @@ class App:
                       if s.speaker != name]
             async with self.trigger_lock:
                 t0 = time.monotonic()
-                r = await asyncio.to_thread(self.checker.check, transcript, self.gate.raised_reasons)
+                r = await asyncio.to_thread(self.checker.check, transcript, self.gate.raised_reasons,
+                                            self.notes.for_prompt)
                 took = time.monotonic() - t0
             now = self.now
             # don't let slow checks crowd out answers: wait at least 1.5x the last check's duration
@@ -370,7 +413,8 @@ class App:
         async with self.interject_lock:
             # retrieve with the person's words plus the checker's short reason (which names the topic)
             res = await self.interjector.run("interjection", f"{r.quote} {r.reason}", transcript, trigger=r.trigger,
-                                             reason=f'"{r.quote}" ({r.reason})', max_sentences=2)
+                                             reason=f'"{r.quote}" ({r.reason})', max_sentences=2,
+                                             notes=self.notes.for_prompt)
         hand.text = res.text
         self.events.write("hand_text", id=hand.id, t=round(self.now, 2), text=res.text, cited=res.cited,
                           prep_s=round(time.monotonic() - t0, 2))
@@ -379,6 +423,13 @@ class App:
             await self.show_revealed(hand)
 
     async def show_revealed(self, h: Hand) -> None:
+        if h.text is not None and not getattr(h, "in_transcript", False):
+            # the room heard it: add it to the transcript (as Sherlock) for later checks and the notes
+            h.in_transcript = True
+            own = Segment(round(self.now, 2), round(self.now + 0.01, 2), h.text,
+                          speaker=self.cfg.get("assistant_name", "Sherlock"))
+            self.store.add(own)
+            self.push_line(own)
         await self.hub.send({"type": "hand_revealed", "id": h.id, "trigger": h.trigger,
                              "text": h.text if h.text is not None else "…preparing",
                              "quote": h.quote, "quote_t": h.quote_t})
@@ -489,6 +540,14 @@ class App:
                 await self.set_model(key.split(".")[1], value)
             elif key == "mode":
                 self.set_mode(value)
+            elif key == "display.transcript":
+                S.set_path(self.cfg, key, value)
+                if value == "off":
+                    await self.hub.send({"type": "transcript_off"})
+                else:
+                    await self.hub.send({"type": "transcript", "reset": True, "lines": [
+                        {"start": round(s.start, 1), "speaker": s.speaker, "text": s.text}
+                        for s in self.store.segments[-60:]]})
             elif key.startswith("voice."):
                 S.set_path(self.cfg, key, value)
                 if self.speaker:
@@ -610,7 +669,7 @@ class App:
         # once makes each load the paper at the same time and all of them slow)
         if self.mode in HAND_MODES:
             self.spawn(self.warm("hand checker", self.checker.warmup))
-        loops = [asyncio.create_task(self.question_loop())]
+        loops = [asyncio.create_task(self.question_loop()), asyncio.create_task(self.notes_loop())]
         if hasattr(self.source, "last_sound"):
             loops.append(asyncio.create_task(self.audio_watch()))
         if self.mode in HAND_MODES:

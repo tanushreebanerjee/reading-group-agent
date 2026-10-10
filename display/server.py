@@ -9,6 +9,8 @@ Server -> client messages (JSON, field "type"):
   hand_revealed  {id, trigger, text}
   hand_cleared   {id, count}
   settings       {fields: [{key, label, kind, options, min, max, value}], error?}   # for /control
+  transcript     {lines: [{start, speaker, text}], reset?}   # live transcript (if display.transcript)
+  transcript_off {}
 Client -> server: {"action": "reveal" | "dismiss" | "stop_speaking"} or {"action": "set", "key": ..., "value": ...}
 Actions are only accepted from pages served by this server (Origin check), so another
 website open in the same browser cannot reveal hands or change settings.
@@ -52,6 +54,11 @@ class Hub:
             self.state["hand"] = msg
         elif t == "settings":
             self.state["settings"] = {k: v for k, v in msg.items() if k != "error"}
+        elif t == "transcript":
+            lines = ([] if msg.get("reset") else self.state.get("transcript", {}).get("lines", [])) + msg["lines"]
+            self.state["transcript"] = {"type": "transcript", "reset": True, "lines": lines[-60:]}
+        elif t == "transcript_off":
+            self.state.pop("transcript", None)
         else:
             self.state[t] = msg
         data = json.dumps(msg)
@@ -65,7 +72,7 @@ class Hub:
         """Accept a client and replay the current state so a reloaded page is up to date."""
         await ws.accept()
         self.clients.add(ws)
-        for key in ("status", "screen", "hand", "settings"):
+        for key in ("status", "screen", "hand", "settings", "transcript"):
             if key in self.state:
                 await ws.send_text(json.dumps(self.state[key]))
 

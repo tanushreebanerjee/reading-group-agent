@@ -39,10 +39,20 @@
   .dot.warn { background: #f85149; }
   .warn-text { color: #f85149; }
   kbd { border: 1px solid #444; border-radius: 4px; padding: 0 .4vw; }
+  #hand .icon { font-size: 2.2vw; }
+  #hand.point .type { color: #7ee787; }
+  #tbtn { font: inherit; color: var(--muted); background: transparent; border: 1px solid #333;
+    border-radius: 999px; padding: .1vh .9vw; cursor: pointer; }
+  #transcript { display: none; max-height: 26vh; overflow-y: auto; margin-top: 1.5vh; padding: 1vh 1.2vw;
+    border-top: 1px solid #222; font-size: 1.3vw; line-height: 1.45; color: #b8c0cc; }
+  #transcript.open { display: block; }
+  #transcript .ts { color: var(--muted); margin-right: .6vw; font-variant-numeric: tabular-nums; }
+  #transcript .me { color: var(--accent); }
   @media (max-width: 700px) {
     body { padding: 16px; }
     .name { font-size: 20px; } #hand { font-size: 16px; } #hand button { font-size: 14px; }
     #answer { font-size: 24px; } #question, #label { font-size: 16px; } footer { font-size: 12px; flex-wrap: wrap; }
+    #hand .icon { font-size: 18px; } #transcript { font-size: 13px; max-height: 35vh; }
   }
 </style>
 </head>
@@ -50,25 +60,58 @@
 <header>
   <div class="name" id="name">Sherlock <span>· reading group assistant</span></div>
   <div id="hand" aria-live="polite">
-    <span>✋</span><span class="type" id="hand-type"></span><span id="hand-count"></span>
-    <button id="reveal" title="R">Reveal</button><button id="dismiss" title="D">Dismiss</button>
+    <span class="icon" id="hand-icon">✋</span><span class="type" id="hand-type"></span><span id="hand-count"></span>
+    <button id="reveal" title="R">Call on Sherlock</button><button id="dismiss" title="D">Dismiss</button>
   </div>
 </header>
 <main>
   <div id="label"></div>
   <div id="question"></div>
   <div id="answer" class="idle">Waiting for a question…</div>
+  <section id="transcript" aria-label="Live transcript"></section>
 </main>
 <footer>
   <span><span class="dot" id="dot"></span><span id="listening">connecting</span></span>
   <span id="mode">mode: –</span>
   <span id="latency">last answer: –</span>
   <span id="models"></span>
-  <span><kbd>R</kbd> reveal · <kbd>D</kbd> dismiss · <kbd>S</kbd> stop speaking</span>
+  <span><kbd>R</kbd> call on · <kbd>D</kbd> dismiss · <kbd>S</kbd> stop speaking · <kbd>T</kbd> transcript</span>
+  <button id="tbtn" style="display:none">Transcript ▸</button>
 </footer>
 <script>
 const $ = id => document.getElementById(id);
 let ws, answerId = null;
+// how each kind of raised hand is shown
+const HANDS = {
+  contradiction: {icon: "⚠️", label: "Correction"},
+  gap: {icon: "❓", label: "Unanswered question"},
+  point: {icon: "🙋", label: "Point"},
+};
+const handLook = t => HANDS[t] || {icon: "✋", label: t || ""};
+const fmt = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
+
+// live transcript panel (closed by default; remembered per browser)
+let transcriptOpen = false;
+try { transcriptOpen = localStorage.getItem("rga.transcript") === "open"; } catch (e) {}
+if (new URLSearchParams(location.search).has("transcript")) transcriptOpen = true;   // ?transcript=1
+function setTranscriptOpen(open) {
+  transcriptOpen = open;
+  $("transcript").className = open ? "open" : "";
+  $("tbtn").textContent = open ? "Transcript ▾" : "Transcript ▸";
+  try { localStorage.setItem("rga.transcript", open ? "open" : "closed"); } catch (e) {}
+  if (open) $("transcript").scrollTop = $("transcript").scrollHeight;
+}
+function addLine(seg) {
+  const box = $("transcript");
+  const atEnd = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+  const div = document.createElement("div");
+  if (seg.speaker) div.className = "me";
+  const ts = document.createElement("span"); ts.className = "ts"; ts.textContent = fmt(seg.start);
+  div.append(ts, document.createTextNode((seg.speaker ? seg.speaker + ": " : "") + seg.text));
+  box.appendChild(div);
+  while (box.childElementCount > 80) box.removeChild(box.firstChild);
+  if (atEnd) box.scrollTop = box.scrollHeight;
+}
 
 function connect() {
   // keep the share key (?k=...) from the page URL; wss when opened through an https tunnel
@@ -121,19 +164,29 @@ function handle(m) {
       handId = m.count > 0 ? m.id : null;
       if (m.count > 0) {
         h.className = "on " + (m.trigger || "");
-        $("hand-type").textContent = m.trigger || "";
+        $("hand-icon").textContent = handLook(m.trigger).icon;
+        $("hand-type").textContent = handLook(m.trigger).label;
         $("hand-count").textContent = m.count > 1 ? `(${m.count})` : "";
       } else { h.className = ""; }
       break;
     }
     case "hand_revealed": {
-      $("label").textContent = `Raised hand · ${m.trigger}`;
+      $("label").textContent = `${handLook(m.trigger).icon} Sherlock · ${handLook(m.trigger).label.toLowerCase()}`;
       // say what the hand responds to: the conversation may have moved on since
-      const when = m.quote_t != null ? ` (${Math.floor(m.quote_t / 60)}:${String(Math.floor(m.quote_t % 60)).padStart(2, "0")})` : "";
+      const when = m.quote_t != null ? ` (${fmt(m.quote_t)})` : "";
       $("question").textContent = m.quote ? `Re: “${m.quote}”${when}` : "";
       setAnswer(m.text, "interjection");
       break;
     }
+    case "transcript": {            // {lines: [...]} on connect, then one line per message
+      $("tbtn").style.display = "";
+      if (m.reset) $("transcript").textContent = "";
+      for (const seg of m.lines || []) addLine(seg);
+      break;
+    }
+    case "transcript_off":
+      $("transcript").textContent = ""; $("tbtn").style.display = "none"; setTranscriptOpen(false);
+      break;
   }
 }
 
@@ -142,11 +195,14 @@ let handId = null;
 function act(action) { if (ws && ws.readyState === 1) ws.send(JSON.stringify({action, id: handId})); }
 $("reveal").onclick = () => act("reveal");
 $("dismiss").onclick = () => act("dismiss");
+$("tbtn").onclick = () => setTranscriptOpen(!transcriptOpen);
+setTranscriptOpen(transcriptOpen);
 document.addEventListener("keydown", e => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === "r" || e.key === "R") act("reveal");
   if (e.key === "d" || e.key === "D") act("dismiss");
   if (e.key === "s" || e.key === "S") act("stop_speaking");
+  if ((e.key === "t" || e.key === "T") && $("tbtn").style.display !== "none") setTranscriptOpen(!transcriptOpen);
 });
 connect();
 </script>
